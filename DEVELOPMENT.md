@@ -1,81 +1,56 @@
-# Doover Application Template
+# Analog Level Sensor -- Development Guide
 
-This repository serves as a template for creating Doover applications.
+## Repository Structure
 
-It provides a structured layout for application code, deployment configurations, simulators, and tests. The template is
-designed to simplify the development and deployment of Doover-compatible applications.
+```
+src/analog_level_sensor/
+  __init__.py               <-- Entry point
+  application.py            <-- Sensor reading, Kalman filtering, level/volume calculation
+  app_config.py             <-- Config schema (pins, sensor range, volume curve)
+  app_tags.py               <-- Tags (filled percentage, level reading, raw reading)
+  app_ui.py                 <-- UI (percentage gauge, level display)
+```
 
-The basic structure of the repository is as follows:
+## Architecture
+
+### Signal Processing Pipeline
+
+```
+4-20mA Analog Input → Kalman Filter → Sensor % → Level (m) → Fill %
+                                                       ↓
+                                              Volume Curve (optional)
+```
+
+1. **Raw reading** -- `platform_iface.fetch_ai(pin)` returns mA value
+2. **Range validation** -- rejects values outside `sensor_min_mA` to `sensor_max_mA`
+3. **Kalman filter** -- smooths noise with configurable variance
+4. **Sensor percentage** -- maps mA to 0-100% (inverted for radar sensors)
+5. **Level reading** -- maps percentage to metres using sensor min/max
+6. **Fill percentage** -- either linear mapping (empty→full) or volume curve interpolation
+
+### Volume Curve
+
+When configured with 2+ points, fill percentage is calculated from interpolated volume rather than linear level mapping. This handles non-linear tank geometries (e.g. cylindrical, conical).
+
+### No State Machine
+
+This app has no state machine -- it reads the sensor every loop iteration and publishes after a minimum warmup period (10 readings).
 
 ## Getting Started
 
+```bash
+uv sync
+uv run pytest tests/
 ```
-README.md           <-- App description
-DEVELOPMENT.md      <-- This file
-pyproject.toml      <-- Python project configuration file (including dependencies)
-Dockerfile          <-- Dockerfile for building the application image
-doover_config.json  <-- Configuration file for doover
-
-src/app_template/   <-- Application directory
-  application.py    <-- Main application code
-  app_config.py     <-- Config schema definition
-  app_ui.py         <-- UI code (if applicable)
-  app_state.py      <-- State machine (if applicable)
-
-simulator/
-  app_config.json   <-- Sample configuration for the simulator
-  docker-compose.yml <-- Docker Compose file for the simulator
-  
-tests/
-    test_imports.py  <-- Test file for the application
-```
-
-The `doover_config.json` file is the doover configuration file for the application. 
-
-It defines all metadata about the application, including name, short and long description, 
-dependent apps, image name, owner organisation, container registry and more.
-
-### Prerequisites
-
-- Docker and Docker Compose installed
-- Python 3.11 or later (if running locally)
-- Pipenv for managing Python dependencies
-
-### Running Locally
-
-1. Run the application:
 
 ```bash
-doover app run
+cd simulators
+docker compose up --build
 ```
 
-## Simulators
-
-The `simulator/` directory contains tools for simulating application behavior. For example:
-
-- `app_config.json`: Sample configuration file for the app.
-- `docker-compose.yml`: Defines services for running the application.
-
-You can find a sample simulator in the `simulator/sample/` directory. While it is fairly bare-bones, it shows
-positioning of the simulator in the application structure, and how to start the simulator alongside your application.
-
-## Testing
-
-Run the tests using the following command:
+## Regenerating doover_config.json
 
 ```bash
-pytest tests/
+uv run export-config
+uv run export-ui
 ```
-
-## Deployment
-
-The `deployment/` directory contains deployment configurations, including a `docker-compose.yml` file for orchestrating
-services.
-
-## Customization
-
-To create your own Doover application:
-
-1. Modify the application logic in the appropriate directory.
-2. Update the simulator and test configurations as needed.
-3. Adjust deployment configurations to suit your requirements.
