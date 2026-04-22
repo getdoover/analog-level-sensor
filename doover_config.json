@@ -111,6 +111,19 @@
                     "default": null,
                     "x-position": 7
                 },
+                "polling_frequency": {
+                    "title": "Polling Frequency",
+                    "x-name": "polling_frequency",
+                    "x-hidden": false,
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "How often to poll the sensor (Hz)",
+                    "default": 1.0,
+                    "x-position": 8
+                },
                 "sensor_type": {
                     "enum": [
                         "Submersible",
@@ -127,7 +140,7 @@
                     "x-required": false,
                     "description": "Type of sensor. Radar inverted reads like a submersible sensor.",
                     "default": "Submersible",
-                    "x-position": 8
+                    "x-position": 9
                 },
                 "volume_curve": {
                     "title": "Volume Curve",
@@ -135,7 +148,7 @@
                     "x-hidden": false,
                     "type": "array",
                     "x-required": true,
-                    "x-position": 9,
+                    "x-position": 10,
                     "items": {
                         "title": "Volume Curve Point",
                         "x-name": "volume_curve_point",
@@ -182,7 +195,7 @@
                     "x-required": false,
                     "description": "Position of Application in UI Structure. Smaller numbers are closer to the top.",
                     "default": 100,
-                    "x-position": 10,
+                    "x-position": 11,
                     "minimum": 0
                 }
             },

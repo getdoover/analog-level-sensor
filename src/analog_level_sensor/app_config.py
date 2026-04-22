@@ -40,6 +40,11 @@ class AnalogLevelSensorConfig(config.Schema):
     power_pin = config.Integer(
         "Power Pin", description="Digital output pin to power the sensor", default=None
     )
+    polling_frequency = config.Number(
+        "Polling Frequency",
+        description="How often to poll the sensor (Hz)",
+        default=1.0,
+    )
     type = config.Enum(
         "Sensor Type",
         description="Type of sensor. Radar inverted reads like a submersible sensor.",
