@@ -56,6 +56,17 @@ class AnalogLevelSensorConfig(config.Schema):
         element=VolumeCurvePoint("Volume Curve Point"),
     )
 
+    hide_volume = config.Boolean(
+        "Hide Volume",
+        description="Whether to hide the tank volume in the UI",
+        default=True,
+    )
+    max_volume = config.Number(
+        "Max Volume",
+        description="Maximum tank volume in litres, used when no volume curve is configured",
+        default=100000.0,
+    )
+
     position = ApplicationPosition()
 
 

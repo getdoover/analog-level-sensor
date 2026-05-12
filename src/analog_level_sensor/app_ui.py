@@ -23,6 +23,14 @@ class AnalogLevelSensorUI(ui.UI):
         precision=2,
     )
 
+    volume = ui.NumericVariable(
+        "Volume",
+        units="L",
+        value=AnalogLevelSensorTags.level_volume,
+        precision=0,
+        hidden="$config.app().hide_volume:boolean:true",
+    )
+
 
 def export():
     from pathlib import Path

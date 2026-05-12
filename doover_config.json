@@ -1,6 +1,6 @@
 {
     "analog_level_sensor": {
-        "id": "144013263405893128",
+        "id": 144013263405893128,
         "name": "analog_level_sensor",
         "display_name": "Analog Level Sensor",
         "type": "DEV",
@@ -8,11 +8,17 @@
         "allow_many": true,
         "description": "App for analog (4-20mA) level sensors. Both radar and submersible sensors are supported.",
         "long_description": "README.md",
-        "depends_on": [],
+        "depends_on": [
+            "platform_interface"
+        ],
         "organisation_id": null,
         "image_name": "ghcr.io/getdoover/analog-level-sensor:main",
-        "container_registry_profile_id": "93955828574386692",
+        "container_registry_profile_id": 93955828574386692,
         "build_args": "--platform linux/amd64,linux/arm64",
+        "staging_config": {
+            "container_registry_profile_id": "7369503425484439552",
+            "id": 179478624141861898
+        },
         "config_schema": {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": "",
@@ -184,6 +190,32 @@
                         "x-defaultCollapsed": false
                     }
                 },
+                "hide_volume": {
+                    "title": "Hide Volume",
+                    "x-name": "hide_volume",
+                    "x-hidden": false,
+                    "type": [
+                        "boolean",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Whether to hide the tank volume in the UI",
+                    "default": true,
+                    "x-position": 11
+                },
+                "max_volume": {
+                    "title": "Max Volume",
+                    "x-name": "max_volume",
+                    "x-hidden": false,
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Maximum tank volume in litres, used when no volume curve is configured",
+                    "default": 100000.0,
+                    "x-position": 12
+                },
                 "dv_app_position": {
                     "title": "Position",
                     "x-name": "dv_app_position",
@@ -195,7 +227,7 @@
                     "x-required": false,
                     "description": "Position of Application in UI Structure. Smaller numbers are closer to the top.",
                     "default": 100,
-                    "x-position": 11,
+                    "x-position": 13,
                     "minimum": 0
                 }
             },
@@ -213,7 +245,7 @@
             "position": "$config.app().dv_app_position:number:100",
             "icon": null,
             "colour": null,
-            "defaultOpen": false,
+            "defaultOpen": "$config.app().dv_app_default_open:boolean",
             "type": "uiApplication",
             "name": "$config.app().APP_KEY",
             "children": {
@@ -257,8 +289,32 @@
                     "varType": "float",
                     "currentValue": "$tag.app().level_reading:number:null",
                     "decPrecision": 2
+                },
+                "volume": {
+                    "name": "volume",
+                    "type": "uiVariable",
+                    "displayString": "Volume",
+                    "showActivity": true,
+                    "position": 53,
+                    "hidden": "$config.app().hide_volume:boolean:true",
+                    "units": "L",
+                    "varType": "float",
+                    "currentValue": "$tag.app().level_volume:number:null",
+                    "decPrecision": 0
                 }
             }
-        }
+        },
+        "key": null,
+        "owner_org_id": null,
+        "code_repo_id": null,
+        "repo_branch": "main",
+        "lambda_config": null,
+        "icon_url": null,
+        "banner_url": null,
+        "build_widget_command": null,
+        "export_config_command": null,
+        "export_ui_command": null,
+        "run_command": null,
+        "lambda_arn": null
     }
 }

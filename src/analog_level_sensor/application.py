@@ -36,6 +36,8 @@ class AnalogLevelSensorApplication(Application):
         await self.tags.level_filled_percentage.set(self._filled_percentage(result))
         await self.tags.level_reading.set(self._level_reading(result))
         await self.tags.raw_level_reading.set(result)
+        if not self.config.hide_volume.value:
+            await self.tags.level_volume.set(self._volume(result))
 
     def _map_value(self, value, low_a, high_a, low_b, high_b, invert=False):
         if invert and self.config.type.value is SensorType.RADAR:
@@ -78,6 +80,16 @@ class AnalogLevelSensorApplication(Application):
         if vol is None or max_vol is None:
             return None
         return round(vol / max_vol * 100, 3)
+
+    def _volume(self, reading) -> float | None:
+        curve = self.config.volume_curve.elements
+        if len(curve) >= 2:
+            return self._get_volume(self._level_reading(reading), curve)
+
+        perc = self._filled_percentage(reading)
+        if perc is None:
+            return None
+        return self.config.max_volume.value * (perc / 100)
 
     async def on_shutdown_at(self, _seconds: int):
         if self.config.power_pin.value is not None:
