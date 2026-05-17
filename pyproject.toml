@@ -5,7 +5,7 @@ description = "Doover application for analog (4-20mA) level sensors"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "pydoover==1.0.0a8",
+    "pydoover",
 ]
 
 [project.scripts]
@@ -25,4 +25,7 @@ dev = [
     "pytest>=8.3.5",
     "pytest-asyncio>=0.26.0",
 ]
+
+[tool.uv.sources]
+pydoover = { git = "https://github.com/getdoover/pydoover" }
 
