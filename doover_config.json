@@ -216,6 +216,19 @@
                     "default": 100000.0,
                     "x-position": 12
                 },
+                "volume_decimal_precision": {
+                    "title": "Volume Decimal Precision",
+                    "x-name": "volume_decimal_precision",
+                    "x-hidden": false,
+                    "type": [
+                        "integer",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Number of decimal places to show for the volume reading",
+                    "default": 0,
+                    "x-position": 13
+                },
                 "dv_app_position": {
                     "title": "Position",
                     "x-name": "dv_app_position",
@@ -227,7 +240,7 @@
                     "x-required": false,
                     "description": "Position of Application in UI Structure. Smaller numbers are closer to the top.",
                     "default": 100,
-                    "x-position": 13,
+                    "x-position": 14,
                     "minimum": 0
                 }
             },
@@ -264,19 +277,20 @@
                     "ranges": [
                         {
                             "min": 0,
-                            "max": 15,
+                            "max": 15.0,
                             "colour": "blue",
                             "show_on_graph": true,
                             "label": "Low"
                         },
                         {
-                            "min": 15,
+                            "min": 15.0,
                             "max": 100,
                             "colour": "green",
                             "show_on_graph": true,
                             "label": "Good"
                         }
-                    ]
+                    ],
+                    "live": true
                 },
                 "level_reading": {
                     "name": "level_reading",
@@ -288,7 +302,8 @@
                     "units": "m",
                     "varType": "float",
                     "currentValue": "$tag.app().level_reading:number:null",
-                    "decPrecision": 2
+                    "decPrecision": 2,
+                    "live": true
                 },
                 "volume": {
                     "name": "volume",
@@ -296,7 +311,7 @@
                     "displayString": "Volume",
                     "showActivity": true,
                     "position": 53,
-                    "hidden": "$config.app().hide_volume:boolean:true",
+                    "hidden": true,
                     "units": "L",
                     "varType": "float",
                     "currentValue": "$tag.app().level_volume:number:null",
