@@ -48,6 +48,7 @@ class AnalogLevelSensorUI(ui.UI):
         # below it (no radial gauge). Level reading stays as a secondary value.
         max_vol = self._gauge_max_volume()
         self.volume.hidden = False
+        self.volume.precision = int(self.config.volume_precision.value)
         self.volume.form = ui.Widget.radial
         self.volume.ranges = [
             ui.Range("Low", 0, _LOW_BAND * max_vol, ui.Colour.blue),

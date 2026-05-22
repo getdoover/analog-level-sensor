@@ -66,6 +66,11 @@ class AnalogLevelSensorConfig(config.Schema):
         description="Maximum tank volume in litres, used when no volume curve is configured",
         default=100000.0,
     )
+    volume_precision = config.Integer(
+        "Volume Decimal Precision",
+        description="Number of decimal places to show for the volume reading",
+        default=0,
+    )
 
     position = ApplicationPosition()
 
