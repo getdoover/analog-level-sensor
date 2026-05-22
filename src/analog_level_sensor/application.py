@@ -40,7 +40,7 @@ class AnalogLevelSensorApplication(Application):
             await self.tags.level_volume.set(self._volume(result))
 
     def _map_value(self, value, low_a, high_a, low_b, high_b, invert=False):
-        if invert and self.config.type.value is SensorType.RADAR:
+        if invert and self.config.type.value == SensorType.RADAR:
             return (high_b - low_b) - ((value - low_a) / (high_a - low_a)) * (
                 high_b - low_b
             )
@@ -100,25 +100,24 @@ class AnalogLevelSensorApplication(Application):
         if not volume_curve:
             return None
 
-        curve = {}
-        for point in volume_curve:
-            curve[point.level.value] = point.volume.value
+        # Sort (level, volume) pairs together as floats so the mapping is
+        # preserved even if config values arrive as strings.
+        points = sorted(
+            (float(p.level.value), float(p.volume.value)) for p in volume_curve
+        )
 
-        sorted_levels = sorted(float(l) for l in curve.keys())
-        sorted_keys = sorted(curve.keys())
-
-        for i in range(len(sorted_levels) - 1):
-            if sorted_levels[i] <= level <= sorted_levels[i + 1]:
-                x1, y1 = sorted_levels[i], curve[sorted_keys[i]]
-                x2, y2 = sorted_levels[i + 1], curve[sorted_keys[i + 1]]
+        # Interpolate within the curve.
+        for (x1, y1), (x2, y2) in zip(points, points[1:]):
+            if x1 <= level <= x2:
                 return y1 + (level - x1) * (y2 - y1) / (x2 - x1)
 
-        if level < sorted_levels[0]:
-            x1, y1 = sorted_levels[0], curve[sorted_keys[0]]
-            x2, y2 = sorted_levels[1], curve[sorted_keys[1]]
+        # Outside the curve's range, extrapolate off the nearest end segment.
+        # This intentionally allows volume (and filled %) to run past the
+        # curve's bounds so misconfiguration shows up rather than being hidden.
+        if level < points[0][0]:
+            (x1, y1), (x2, y2) = points[0], points[1]
         else:
-            x1, y1 = sorted_levels[-2], curve[sorted_keys[-2]]
-            x2, y2 = sorted_levels[-1], curve[sorted_keys[-1]]
+            (x1, y1), (x2, y2) = points[-2], points[-1]
 
         return y1 + (level - x1) * (y2 - y1) / (x2 - x1)
 
