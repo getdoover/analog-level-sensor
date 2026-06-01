@@ -33,6 +33,9 @@ class AnalogLevelSensorApplication(Application):
         if result is None or result < self.config.sensor_min_mA.value:
             return
 
+        if self.config.power_pin.value is not None:
+            await self.platform_iface.set_do(int(self.config.power_pin.value), True)
+
         await self.tags.level_filled_percentage.set(self._filled_percentage(result))
         await self.tags.level_reading.set(self._level_reading(result))
         await self.tags.raw_level_reading.set(result)
