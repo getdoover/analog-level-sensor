@@ -177,7 +177,7 @@
                                 "x-hidden": false,
                                 "type": "number",
                                 "x-required": true,
-                                "description": "Volume in litres",
+                                "description": "Volume in configured volume units",
                                 "x-position": 2
                             }
                         },
@@ -212,9 +212,22 @@
                         "null"
                     ],
                     "x-required": false,
-                    "description": "Maximum tank volume in litres, used when no volume curve is configured",
+                    "description": "Maximum tank volume in the configured volume units, used when no volume curve is configured",
                     "default": 100000.0,
                     "x-position": 12
+                },
+                "volume_units": {
+                    "title": "Volume Units",
+                    "x-name": "volume_units",
+                    "x-hidden": false,
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Units to display the volume reading in (e.g. L, kL, gal)",
+                    "default": "L",
+                    "x-position": 13
                 },
                 "volume_decimal_precision": {
                     "title": "Volume Decimal Precision",
@@ -227,7 +240,7 @@
                     "x-required": false,
                     "description": "Number of decimal places to show for the volume reading",
                     "default": 0,
-                    "x-position": 13
+                    "x-position": 14
                 },
                 "dv_app_position": {
                     "title": "Position",
@@ -240,7 +253,7 @@
                     "x-required": false,
                     "description": "Position of Application in UI Structure. Smaller numbers are closer to the top.",
                     "default": 100,
-                    "x-position": 14,
+                    "x-position": 15,
                     "minimum": 0
                 }
             },

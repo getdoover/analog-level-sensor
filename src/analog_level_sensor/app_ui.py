@@ -38,6 +38,8 @@ class AnalogLevelSensorUI(ui.UI):
     )
 
     async def setup(self):
+        self.volume.units = self.config.volume_units.value
+
         # With volume display disabled, keep the default layout: the percentage
         # level is the primary radial gauge, with the level reading below it.
         if self.config.hide_volume.value:
@@ -63,7 +65,7 @@ class AnalogLevelSensorUI(ui.UI):
         self.level_reading.position = 30
 
     def _gauge_max_volume(self) -> float:
-        """Full-scale value for the volume gauge, in litres.
+        """Full-scale value for the volume gauge, in configured volume units.
 
         Matches the application's volume logic: the top of the volume curve
         when one is configured, otherwise the configured max volume.

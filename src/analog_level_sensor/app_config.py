@@ -12,7 +12,7 @@ class SensorType:
 
 class VolumeCurvePoint(config.Object):
     level = config.Number("Level", description="Level / depth in metres")
-    volume = config.Number("Volume", description="Volume in litres")
+    volume = config.Number("Volume", description="Volume in configured volume units")
 
 
 class AnalogLevelSensorConfig(config.Schema):
@@ -63,8 +63,13 @@ class AnalogLevelSensorConfig(config.Schema):
     )
     max_volume = config.Number(
         "Max Volume",
-        description="Maximum tank volume in litres, used when no volume curve is configured",
+        description="Maximum tank volume in the configured volume units, used when no volume curve is configured",
         default=100000.0,
+    )
+    volume_units = config.String(
+        "Volume Units",
+        description="Units to display the volume reading in (e.g. L, kL, gal)",
+        default="L",
     )
     volume_precision = config.Integer(
         "Volume Decimal Precision",
