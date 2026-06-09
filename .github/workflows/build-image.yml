@@ -72,7 +72,7 @@ jobs:
 
       - name: Sign image (key-pair, offline-verifiable)
         env:
-          COSIGN_PRIVATE_KEY: ${{ secrets.DOOVER_CORE_COSIGN_PRIVATE_KEY }}
+          COSIGN_PRIVATE_KEY: ${{ secrets.DOOVER_PUBLIC_COSIGN_PRIVATE_KEY }}
           COSIGN_PASSWORD: ""
           DIGEST: ${{ steps.push.outputs.digest }}
         run: |
