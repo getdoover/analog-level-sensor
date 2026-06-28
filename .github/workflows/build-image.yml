@@ -31,6 +31,11 @@ jobs:
     uses: ./.github/workflows/run-tests.yml
     secrets: inherit
 
+  validate:
+    name: Validate Schemas
+    uses: ./.github/workflows/validate-schema.yml
+    secrets: inherit
+
   smoke_test:
     name: Smoke Test (container runs)
     runs-on: ubuntu-latest
@@ -63,8 +68,8 @@ jobs:
 
   push_to_registries:
     name: Push Docker Image
-    needs: [lint, test, smoke_test]
-    if: ${{ github.event_name != 'pull_request' && (needs.test.result == 'success' && needs.smoke_test.result == 'success' || (github.event_name == 'workflow_dispatch' &&  github.event.inputs.confirmation == 'true')) }}
+    needs: [lint, test, validate, smoke_test]
+    if: ${{ github.event_name != 'pull_request' && (needs.test.result == 'success' && needs.validate.result == 'success' && needs.smoke_test.result == 'success' || (github.event_name == 'workflow_dispatch' &&  github.event.inputs.confirmation == 'true')) }}
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -117,3 +122,42 @@ jobs:
           cosign sign --yes --tlog-upload=false --registry-referrers-mode oci-1-1 \
             --key env://COSIGN_PRIVATE_KEY \
             "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
+
+  release:
+    name: Release to Doover (${{ matrix.environment }})
+    needs: push_to_registries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false # one environment failing must not block the other
+      matrix:
+        include:
+          - environment: staging
+            control_api: https://api.staging.udoover.com
+          - environment: production
+            control_api: https://api.doover.com
+    env:
+      DOOVER_CONTROL_API_BASE_URL: ${{ matrix.control_api }}
+      DOOVER_OIDC_AUDIENCE: ${{ matrix.control_api }}
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Doover CLI
+        run: uv tool install doover-cli
+
+      - name: Publish app metadata to Doover
+        run: doover app publish
+
+      - name: Release a new application version
+        run: doover app release --digest "${{ needs.push_to_registries.outputs.digest }}" --commit "${{ github.sha }}"
