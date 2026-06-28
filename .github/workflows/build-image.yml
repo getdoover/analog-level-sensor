@@ -71,6 +71,8 @@ jobs:
     needs: [lint, test, validate, smoke_test]
     if: ${{ github.event_name != 'pull_request' && (needs.test.result == 'success' && needs.validate.result == 'success' && needs.smoke_test.result == 'success' || (github.event_name == 'workflow_dispatch' &&  github.event.inputs.confirmation == 'true')) }}
     runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
     permissions:
       packages: write
       contents: read
