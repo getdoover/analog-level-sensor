@@ -5,6 +5,6 @@ from .application import AnalogLevelSensorApplication
 
 def main():
     """
-    Run the Analog Level Sensor application.
+    Run the Analog Level Sensor application
     """
     run_app(AnalogLevelSensorApplication())
