@@ -38,23 +38,18 @@ Python app: `ai_pin`, `sensor_minimum_ma`, `sensor_maximum_ma`,
 
 ## Build
 
-This app depends on `doover-rs` via a **sibling path dependency**
-(`../../doover-rs`), matching the standard side-by-side Doover checkout
-(`~/Coding/doover/{analog-level-sensor,doover-rs}`). So the Docker build context
-is the parent directory containing both:
+This app depends on [`doover-rs`](https://github.com/getdoover/doover-rs) as a
+git dependency, pinned to a revision in `Cargo.toml` (the `pydoover`-from-PyPI
+equivalent; switch to a version tag once doover-rs cuts releases). Nothing else
+is needed — cargo fetches it.
 
 ```sh
-# from the directory containing analog-level-sensor/ and doover-rs/
-docker build -f analog-level-sensor/rust/Dockerfile \
-    -t ghcr.io/getdoover/analog-level-sensor-rs:main .
-
 # local dev
-cd rust && cargo build --release   # needs ../../doover-rs checked out
-```
+cd rust && cargo build --release
 
-**Follow-up:** publish `doover-rs` (the `pydoover`-from-PyPI equivalent) and
-switch `Cargo.toml` to a versioned/git dependency; then the normal app-repo
-build context and the existing `build-image.yml` CI can build it.
+# container image (build from the repo root)
+docker build -f rust/Dockerfile -t ghcr.io/getdoover/analog-level-sensor-rs:main .
+```
 
 ## Verified on a CM4 (doovit)
 

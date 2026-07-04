@@ -10,10 +10,9 @@ name = "analog-level-sensor"
 path = "src/main.rs"
 
 [dependencies]
-# The Rust equivalent of pydoover. Currently an unpublished sibling checkout
-# (github.com/getdoover/doover-rs) — see rust/README.md. Once it is published,
-# switch this to a versioned/git dependency (the pydoover-from-PyPI equivalent).
-doover = { path = "../../doover-rs/doover" }
+# The Rust equivalent of pydoover, pinned to a revision for reproducible builds
+# (switch to a version tag once doover-rs starts cutting releases).
+doover = { git = "https://github.com/getdoover/doover-rs", rev = "0315a8921067fcdd015b678604e8cd7211048239" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time"] }
 serde_json = "1"
 tracing = "0.1"
