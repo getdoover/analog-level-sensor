@@ -1,13 +1,6 @@
 name: Test, Lint & Deploy Docker Image
 
 on:
-  workflow_dispatch:
-    inputs:
-      confirmation:
-        description: 'Push image on failed test or linting (not recommended!)?'
-        required: true
-        type: boolean
-
   push:
     branches:
       - main
