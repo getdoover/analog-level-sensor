@@ -3,12 +3,23 @@
 ## Repository Structure
 
 ```
+src/common/
+  common_app.py             <-- Shared conversion logic and tag updates
+  common_config.py          <-- Shared level sensor config schema
+  common_tags.py            <-- Shared output tags
+  common_ui.py              <-- Shared UI state
 src/analog_level_sensor/
-  __init__.py               <-- Entry point
-  application.py            <-- Sensor reading, Kalman filtering, level/volume calculation
-  app_config.py             <-- Config schema (pins, sensor range, volume curve)
-  app_tags.py               <-- Tags (filled percentage, level reading, raw reading)
-  app_ui.py                 <-- UI (percentage gauge, level display)
+  __init__.py               <-- Docker device entry point
+  application.py            <-- Hardware polling and power-pin handling
+  app_config.py             <-- Device config (AI pin, power pin, polling)
+  app_tags.py               <-- Device tag wrapper
+  app_ui.py                 <-- Device UI wrapper
+src/analog_level_sensor_processor/
+  __init__.py               <-- Processor Lambda entry point
+  application.py            <-- Message-path input handling
+  app_config.py             <-- Processor config (input message path, subscriptions)
+  app_tags.py               <-- Processor output tag wrapper
+  app_ui.py                 <-- Processor UI wrapper
 ```
 
 ## Architecture
@@ -16,17 +27,16 @@ src/analog_level_sensor/
 ### Signal Processing Pipeline
 
 ```
-4-20mA Analog Input → Kalman Filter → Sensor % → Level (m) → Fill %
+Analog Input → Sensor % → Level (m) → Fill %
                                                        ↓
                                               Volume Curve (optional)
 ```
 
-1. **Raw reading** -- `platform_iface.fetch_ai(pin)` returns mA value
-2. **Range validation** -- rejects values outside `sensor_min_mA` to `sensor_max_mA`
-3. **Kalman filter** -- smooths noise with configurable variance
-4. **Sensor percentage** -- maps mA to 0-100% (inverted for radar sensors)
-5. **Level reading** -- maps percentage to metres using sensor min/max
-6. **Fill percentage** -- either linear mapping (empty→full) or volume curve interpolation
+1. **Raw reading** -- the Docker app reads `platform_iface.fetch_ai(pin)`; the processor app reads a configured message path such as `$on_dm_event.analog_input_v`
+2. **Range validation** -- ignores values below `sensor_min_mA`
+3. **Sensor percentage** -- maps the configured input range to 0-100% (inverted for radar sensors)
+4. **Level reading** -- maps percentage to metres using sensor min/max
+5. **Fill percentage** -- either linear mapping (empty→full) or volume curve interpolation
 
 ### Volume Curve
 
@@ -53,4 +63,6 @@ docker compose up --build
 ```bash
 uv run export-config
 uv run export-ui
+uv run export-config-processor
+uv run export-ui-processor
 ```
