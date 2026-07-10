@@ -1,8 +1,8 @@
 """Tests for the alarm's wiring into the device application.
 
 These build a real config and inject a deployment config, so they also cover the
-published key names and the fallbacks used when an older deployment config has
-no alarm block at all.
+published key names and the fallbacks used when an older deployment config
+carries none of the alarm keys.
 """
 
 import pytest
@@ -43,7 +43,11 @@ def reset_config_elements():
 
 
 def make_config(alarm=UNSET, **overrides):
-    """A fully injected device config. Pass alarm=UNSET to omit the block entirely."""
+    """A fully injected device config.
+
+    Pass alarm=UNSET to omit every alarm key, as a deployment config written
+    before the alarm existed would.
+    """
     data = {
         "ai_pin": 1,
         "sensor_maximum_metres": 10.0,
@@ -59,7 +63,7 @@ def make_config(alarm=UNSET, **overrides):
         "volume_units": "L",
     }
     if alarm is not UNSET:
-        data["alarm"] = alarm
+        data.update(alarm)
     data.update(overrides)
 
     config = AnalogLevelSensorDeviceConfig()
@@ -68,6 +72,7 @@ def make_config(alarm=UNSET, **overrides):
 
 
 def enabled_alarm(**overrides):
+    """The alarm keys as they are published: flat, at the top level."""
     alarm = {"alarm_enabled": True, "alarm_type": "Greater Than"}
     alarm.update(overrides)
     return alarm
@@ -271,9 +276,9 @@ def test_alarm_type_normalises_a_raw_string_to_a_member():
 
 
 @pytest.mark.asyncio
-async def test_deployment_config_without_an_alarm_block_reads_as_disabled():
+async def test_deployment_config_without_alarm_keys_reads_as_disabled():
     """An app install created before the alarm existed must keep working."""
-    config = make_config()  # no alarm key at all
+    config = make_config()  # none of the alarm keys are present
 
     assert config.alarm_enabled is False
     assert config.alarm_grace_period == 30.0
