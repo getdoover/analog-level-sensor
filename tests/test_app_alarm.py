@@ -103,6 +103,7 @@ class StubApp(CommonAnalogLevelSensorApplication):
 
     # re-wrap: accessing a staticmethod off the class unwraps the descriptor
     _slider_value = staticmethod(App._slider_value)
+    _format_value = staticmethod(App._format_value)
     _alarm_value = App._alarm_value
     _alarm_bounds = App._alarm_bounds
     _check_alarm = App._check_alarm
@@ -112,10 +113,14 @@ class StubApp(CommonAnalogLevelSensorApplication):
         self.config = config
         self.ui = ui
         self.alarm = alarm or Alarm(grace_period=0.0, renotify_interval=0.0)
-        self.notifications = []
+        self.published = []
 
-    async def send_notification(self, message, *, title=None, severity=None):
-        self.notifications.append(message)
+    @property
+    def notifications(self):
+        return [data["message"] for _channel, data in self.published]
+
+    async def create_message(self, channel_name, data):
+        self.published.append((channel_name, data))
 
 
 @pytest.mark.asyncio
@@ -134,6 +139,36 @@ async def test_greater_than_message():
     await app._check_alarm(MID_SCALE_MA)
 
     assert app.notifications == ["Tank has exceeded 4 m with a value of 5 m"]
+
+
+@pytest.mark.asyncio
+async def test_notification_payload_matches_the_data_plane_contract():
+    """severity must be the serde variant name, not the int pydoover emits.
+
+    An int fails to deserialise server-side, and the server then falls back to
+    sending the whole JSON payload as the message body. Omitting the title makes
+    the server substitute the agent's display name.
+    """
+    app = StubApp(make_config(alarm=enabled_alarm()), StubUI(point=4.0))
+
+    await app._check_alarm(MID_SCALE_MA)
+
+    channel, payload = app.published[0]
+    assert channel == "notifications"
+    assert payload["severity"] == "Warn"
+    assert "title" not in payload
+    assert set(payload) == {"message", "severity"}
+
+
+@pytest.mark.asyncio
+async def test_readings_are_rounded_to_two_decimal_places():
+    # 12.8 mA -> 55.0% of a 4-20 mA span -> 5.5 m, and a bound of 1.23456 m
+    config = make_config(alarm=enabled_alarm(alarm_type="Less Than"))
+    app = StubApp(config, StubUI(point=6.98765))
+
+    await app._check_alarm(12.8)
+
+    assert app.notifications == ["Tank has dropped below 6.99 m with a value of 5.5 m"]
 
 
 @pytest.mark.asyncio
