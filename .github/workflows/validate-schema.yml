@@ -23,8 +23,17 @@ jobs:
       - name: Install Doover CLI
         run: uv tool install doover-cli
 
+      # This repo defines two apps, so the CLI cannot resolve one on its own and
+      # falls back to an interactive prompt, which aborts on a runner. Name each
+      # app explicitly. Every app's schema is validated on each invocation; the
+      # --app-name only selects which one is re-exported from its Python source,
+      # so run both to keep either app's committed schema from drifting.
       - name: Validate config schema
-        run: doover config-schema validate
+        run: |
+          doover config-schema validate --app-name analog_level_sensor
+          doover config-schema validate --app-name analog_level_sensor_processor
 
       - name: Validate UI schema
-        run: doover ui-schema validate
+        run: |
+          doover ui-schema validate --app-name analog_level_sensor
+          doover ui-schema validate --app-name analog_level_sensor_processor

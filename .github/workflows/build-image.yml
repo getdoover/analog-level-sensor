@@ -154,14 +154,18 @@ jobs:
       - name: Install Doover CLI
         run: uv tool install doover-cli
 
+      # --app-name is required because the repo defines two apps; without it the
+      # CLI prompts and aborts on a runner. Only the docker app is released here
+      # -- the processor is a lambda and has no image digest to release against.
       - name: Publish app metadata to Doover
-        run: doover app publish
+        run: doover app publish --app-name analog_level_sensor
 
       - name: Release a new application version
         env:
           RELEASE_NOTES: ${{ github.event.head_commit.message || github.event.pull_request.title }}
         run: >-
           doover app release
+          --app-name analog_level_sensor
           --digest "${{ needs.push_to_registries.outputs.digest }}"
           --commit "${{ github.event.pull_request.head.sha || github.sha }}"
           --notes "$RELEASE_NOTES"
