@@ -260,6 +260,128 @@
                     "default": 1.0,
                     "x-position": 9
                 },
+                "alarm": {
+                    "title": "Alarm",
+                    "x-name": "alarm",
+                    "x-hidden": false,
+                    "type": [
+                        "object",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Alarm configuration",
+                    "default": null,
+                    "x-position": 17,
+                    "properties": {
+                        "alarm_enabled": {
+                            "title": "Alarm Enabled",
+                            "x-name": "alarm_enabled",
+                            "x-hidden": false,
+                            "type": [
+                                "boolean",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Send a notification when the reading crosses the alarm point",
+                            "default": false,
+                            "x-position": 1
+                        },
+                        "alarm_type": {
+                            "enum": [
+                                "Greater Than",
+                                "Less Than",
+                                "Allowed Range"
+                            ],
+                            "title": "Alarm Type",
+                            "x-name": "alarm_type",
+                            "x-hidden": false,
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Greater Than and Less Than alarm on a single point. Allowed Range alarms when the reading falls outside a low/high band.",
+                            "default": "Greater Than",
+                            "x-position": 2
+                        },
+                        "alarm_source": {
+                            "enum": [
+                                "Level Reading",
+                                "Filled Percentage",
+                                "Volume"
+                            ],
+                            "title": "Alarm Source",
+                            "x-name": "alarm_source",
+                            "x-hidden": false,
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Which reading the alarm tracks. Sets the slider's bounds and units.",
+                            "default": "Level Reading",
+                            "x-position": 3
+                        },
+                        "alarm_slider_minimum": {
+                            "title": "Alarm Slider Minimum",
+                            "x-name": "alarm_slider_minimum",
+                            "x-hidden": false,
+                            "type": [
+                                "number",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Lower bound of the alarm point slider. Defaults to the alarm source's minimum.",
+                            "default": null,
+                            "x-position": 4
+                        },
+                        "alarm_slider_maximum": {
+                            "title": "Alarm Slider Maximum",
+                            "x-name": "alarm_slider_maximum",
+                            "x-hidden": false,
+                            "type": [
+                                "number",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "Upper bound of the alarm point slider. Defaults to the alarm source's maximum.",
+                            "default": null,
+                            "x-position": 5
+                        },
+                        "alarm_grace_period_s": {
+                            "title": "Alarm Grace Period (s)",
+                            "x-name": "alarm_grace_period_s",
+                            "x-hidden": false,
+                            "type": [
+                                "number",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "How long the reading must stay out of bounds before notifying",
+                            "default": 30.0,
+                            "x-position": 6,
+                            "minimum": 0.0
+                        },
+                        "alarm_renotify_interval_s": {
+                            "title": "Alarm Re-notify Interval (s)",
+                            "x-name": "alarm_renotify_interval_s",
+                            "x-hidden": false,
+                            "type": [
+                                "number",
+                                "null"
+                            ],
+                            "x-required": false,
+                            "description": "How often to re-notify while the alarm remains active",
+                            "default": 900.0,
+                            "x-position": 7,
+                            "minimum": 0.0
+                        }
+                    },
+                    "additionalElements": true,
+                    "required": [],
+                    "x-collapsible": true,
+                    "x-defaultCollapsed": false
+                },
                 "dv_app_position": {
                     "title": "Position",
                     "x-name": "dv_app_position",
@@ -347,6 +469,32 @@
                     "varType": "float",
                     "currentValue": "$tag.app().level_volume:number:null",
                     "decPrecision": 0
+                },
+                "alarm_point": {
+                    "name": "alarm_point",
+                    "type": "uiSlider",
+                    "displayString": "Alarm Point",
+                    "position": 54,
+                    "hidden": true,
+                    "currentValue": "$cmds.app().alarm_point",
+                    "min": 0,
+                    "max": 100,
+                    "stepSize": 0.1,
+                    "dualSlider": false,
+                    "isInverted": false
+                },
+                "alarm_range": {
+                    "name": "alarm_range",
+                    "type": "uiSlider",
+                    "displayString": "Allowed Range",
+                    "position": 55,
+                    "hidden": true,
+                    "currentValue": "$cmds.app().alarm_range",
+                    "min": 0,
+                    "max": 100,
+                    "stepSize": 0.1,
+                    "dualSlider": true,
+                    "isInverted": false
                 }
             }
         },
