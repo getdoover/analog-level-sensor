@@ -51,6 +51,20 @@ Processor-only configuration:
 
 <br/>
 
+### Config compatibility
+
+The alarm settings (`alarm_enabled`, `alarm_type`, `alarm_source`,
+`alarm_slider_minimum`, `alarm_slider_maximum`, `alarm_grace_period_s`,
+`alarm_renotify_interval_s`) are deliberately kept as **flat, top-level config
+keys** rather than being grouped under a nested `AlarmConfig` object. This is
+intentional and must not be "tidied" into a nested block: deployed instances
+store their config against these flat keys, so nesting them would silently drop
+the stored alarm settings on the next config load. A flat optional scalar also
+lets an older deployment config fall back to its default instead of raising.
+See the explanatory comment in `src/analog_level_sensor/app_config.py`.
+
+<br/>
+
 ## Integrations
 
 ### Tags

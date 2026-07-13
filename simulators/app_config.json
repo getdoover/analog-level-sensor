@@ -2,12 +2,12 @@
     "ai_pin": 3,
     "full_level": 0.615,
     "empty_level": 0,
+    "input_units": "mA",
     "sensor_type": "Submersible",
     "sensor_maximum_ma": 20,
     "sensor_minimum_ma": 4,
     "sensor_maximum_metres": 4.0816,
     "sensor_minimum_metres": 0,
-    "show_in_ui": true,
     "volume_curve": [
         {"level": 0, "volume": 0},
         {"level": 0.2, "volume": 150},
@@ -20,5 +20,12 @@
         {"level": 0.515, "volume": 500},
         {"level": 0.56, "volume": 550},
         {"level": 0.615, "volume": 600}
-    ]
+    ],
+    "alarm_enabled": false,
+    "alarm_type": "Greater Than",
+    "alarm_source": "Level Reading",
+    "alarm_slider_minimum": null,
+    "alarm_slider_maximum": null,
+    "alarm_grace_period_s": 30.0,
+    "alarm_renotify_interval_s": 900.0
 }
