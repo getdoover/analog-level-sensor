@@ -1,4 +1,18 @@
+from enum import Enum
+
 from pydoover import config
+
+
+class ReadingType(Enum):
+    # "All Readings" is the default and the backwards-compatible path: a
+    # deployment config written before this element existed has no reading_type
+    # key, so it falls back to this and keeps the historic multi-reading layout
+    # (and, on the device, the historic Alarm Source). The other three focus the
+    # UI on a single reading and point the alarm at that same reading.
+    all = "All Readings"
+    level = "Level Reading"
+    percentage = "Filled Percentage"
+    volume = "Volume"
 
 
 class SensorType:
@@ -19,6 +33,22 @@ class VolumeCurvePoint(config.Object):
 
 
 class CommonAnalogLevelSensorConfig(config.Schema):
+    # Underscore-prefixed so the derived ``reading_type`` property below can take
+    # the clean attribute name; the published key is set explicitly. Sits at the
+    # top of the form as the headline selector.
+    _reading_type = config.Enum(
+        "Reading Type",
+        name="reading_type",
+        choices=ReadingType,
+        default=ReadingType.all,
+        description=(
+            "Which reading to display and alarm on. Choose Level Reading, Filled "
+            "Percentage or Volume to focus the UI on that single reading and point "
+            "the alarm at it. 'All Readings' shows every reading."
+        ),
+        position=0,
+    )
+
     sensor_max_m = config.Number(
         "Sensor Maximum Metres",
         description="Maximum sensor depth (m)",
@@ -101,6 +131,13 @@ class CommonAnalogLevelSensorConfig(config.Schema):
         default=0,
         position=15,
     )
+
+    @property
+    def reading_type(self) -> ReadingType:
+        # config.Enum yields a member when declared from an EnumType, but a raw
+        # string when the value arrives from an injected deployment config.
+        value = self._reading_type.value
+        return value if isinstance(value, ReadingType) else ReadingType(value)
 
 
 CommonConfig = CommonAnalogLevelSensorConfig

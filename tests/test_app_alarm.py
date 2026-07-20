@@ -10,6 +10,7 @@ import pytest
 from pydoover.config import NotSet
 
 from common.common_app import CommonAnalogLevelSensorApplication
+from common.common_config import ReadingType
 
 from analog_level_sensor.alarm import Alarm, AlarmType
 from analog_level_sensor.app_config import AlarmSource, AnalogLevelSensorDeviceConfig
@@ -259,6 +260,43 @@ async def test_volume_source_alarms_on_volume_in_configured_units():
     await app._check_alarm(MID_SCALE_MA)
 
     assert app.notifications == ["Tank has exceeded 400 L with a value of 500 L"]
+
+
+@pytest.mark.asyncio
+async def test_reading_type_defaults_to_all_and_alarm_keeps_the_legacy_source():
+    """An install with no reading_type key keeps its historic alarm source."""
+    config = make_config(alarm=enabled_alarm(alarm_source="Volume"))
+
+    assert config.reading_type is ReadingType.all
+    assert config.alarm_source is ReadingType.volume
+
+    app = StubApp(config, StubUI(point=400.0))
+    await app._check_alarm(MID_SCALE_MA)
+    assert app.notifications == ["Tank has exceeded 400 L with a value of 500 L"]
+
+
+@pytest.mark.asyncio
+async def test_specific_reading_type_drives_the_alarm():
+    config = make_config(alarm=enabled_alarm(), reading_type="Filled Percentage")
+    app = StubApp(config, StubUI(point=40.0))
+
+    await app._check_alarm(MID_SCALE_MA)
+
+    assert app.notifications == ["Tank has exceeded 40 % with a value of 50 %"]
+
+
+def test_specific_reading_type_overrides_the_legacy_alarm_source():
+    config = make_config(
+        alarm=enabled_alarm(alarm_source="Volume"), reading_type="Level Reading"
+    )
+    assert config.alarm_source is ReadingType.level
+    assert config.alarm_units == "m"
+
+
+def test_reading_type_sets_the_slider_bounds_and_units():
+    config = make_config(alarm=enabled_alarm(), reading_type="Volume")
+    assert (config.alarm_slider_min, config.alarm_slider_max) == (0.0, 1000.0)
+    assert config.alarm_units == "L"
 
 
 def test_alarm_value_tracks_the_configured_source():

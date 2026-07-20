@@ -1,5 +1,6 @@
 from pydoover import ui
 
+from .common_config import ReadingType
 from .common_tags import CommonAnalogLevelSensorTags
 
 
@@ -40,6 +41,16 @@ class CommonAnalogLevelSensorUI(ui.UI):
     async def setup(self):
         self.volume.units = self.config.volume_units.value
 
+        # A specific reading type focuses the UI on that single reading; the
+        # default "All Readings" keeps the historic multi-reading layout so
+        # deployments that predate the Reading Type element are untouched.
+        reading_type = self.config.reading_type
+        if reading_type is ReadingType.all:
+            self._setup_all_readings()
+        else:
+            self._setup_single_reading(reading_type)
+
+    def _setup_all_readings(self):
         # With volume display disabled, keep the default layout: the percentage
         # level is the primary radial gauge, with the level reading below it.
         if self.config.hide_volume.value:
@@ -63,6 +74,37 @@ class CommonAnalogLevelSensorUI(ui.UI):
         self.percentage.position = 20
 
         self.level_reading.position = 30
+
+    def _setup_single_reading(self, reading_type: ReadingType):
+        """Show only the selected reading, as the primary radial gauge."""
+        self.percentage.hidden = True
+        self.level_reading.hidden = True
+        self.volume.hidden = True
+
+        if reading_type is ReadingType.percentage:
+            # percentage keeps its class-level radial form and 0-100 bands.
+            self.percentage.hidden = False
+            self.percentage.position = 10
+        elif reading_type is ReadingType.volume:
+            max_vol = self._gauge_max_volume()
+            self.volume.hidden = False
+            self.volume.precision = int(self.config.volume_precision.value)
+            self.volume.form = ui.Widget.radial
+            self.volume.ranges = [
+                ui.Range("Low", 0, _LOW_BAND * max_vol, ui.Colour.blue),
+                ui.Range("Good", _LOW_BAND * max_vol, max_vol, ui.Colour.green),
+            ]
+            self.volume.position = 10
+        else:  # ReadingType.level
+            full = float(self.config.full_level.value)
+            self.level_reading.hidden = False
+            self.level_reading.form = ui.Widget.radial
+            if full > 0:
+                self.level_reading.ranges = [
+                    ui.Range("Low", 0, _LOW_BAND * full, ui.Colour.blue),
+                    ui.Range("Good", _LOW_BAND * full, full, ui.Colour.green),
+                ]
+            self.level_reading.position = 10
 
     def _gauge_max_volume(self) -> float:
         """Full-scale value for the volume gauge, in configured volume units."""

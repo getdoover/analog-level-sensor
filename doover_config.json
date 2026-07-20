@@ -25,6 +25,25 @@
             "title": "$default",
             "type": "object",
             "properties": {
+                "reading_type": {
+                    "enum": [
+                        "All Readings",
+                        "Level Reading",
+                        "Filled Percentage",
+                        "Volume"
+                    ],
+                    "title": "Reading Type",
+                    "x-name": "reading_type",
+                    "x-hidden": false,
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Which reading to display and alarm on. Choose Level Reading, Filled Percentage or Volume to focus the UI on that single reading and point the alarm at it. 'All Readings' shows every reading.",
+                    "default": "All Readings",
+                    "x-position": 0
+                },
                 "sensor_maximum_metres": {
                     "title": "Sensor Maximum Metres",
                     "x-name": "sensor_maximum_metres",
@@ -293,21 +312,23 @@
                 },
                 "alarm_source": {
                     "enum": [
+                        "All Readings",
                         "Level Reading",
                         "Filled Percentage",
                         "Volume"
                     ],
                     "title": "Alarm Source",
                     "x-name": "alarm_source",
-                    "x-hidden": false,
+                    "x-hidden": true,
                     "type": [
                         "string",
                         "null"
                     ],
                     "x-required": false,
-                    "description": "Which reading the alarm tracks. Sets the slider's bounds and units.",
+                    "description": "Deprecated: superseded by Reading Type.",
                     "default": "Level Reading",
-                    "x-position": 19
+                    "x-position": 19,
+                    "deprecated": true
                 },
                 "alarm_slider_minimum": {
                     "title": "Alarm Slider Minimum",
@@ -549,6 +570,25 @@
             "title": "$default",
             "type": "object",
             "properties": {
+                "reading_type": {
+                    "enum": [
+                        "All Readings",
+                        "Level Reading",
+                        "Filled Percentage",
+                        "Volume"
+                    ],
+                    "title": "Reading Type",
+                    "x-name": "reading_type",
+                    "x-hidden": false,
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Which reading to display and alarm on. Choose Level Reading, Filled Percentage or Volume to focus the UI on that single reading and point the alarm at it. 'All Readings' shows every reading.",
+                    "default": "All Readings",
+                    "x-position": 0
+                },
                 "sensor_maximum_metres": {
                     "title": "Sensor Maximum Metres",
                     "x-name": "sensor_maximum_metres",

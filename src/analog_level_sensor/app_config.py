@@ -1,4 +1,3 @@
-from enum import Enum
 from pathlib import Path
 
 from pydoover import config
@@ -6,17 +5,15 @@ from pydoover.config import ApplicationPosition
 
 from common.common_config import (
     CommonAnalogLevelSensorConfig,
-    SensorType,
-    VolumeCurvePoint,
+    ReadingType,
 )
 
 from .alarm import AlarmType
 
 
-class AlarmSource(Enum):
-    level = "Level Reading"
-    percentage = "Filled Percentage"
-    volume = "Volume"
+# The alarm now tracks the shared Reading Type. AlarmSource is retained as an
+# alias so the deprecated fallback field and existing imports keep working.
+AlarmSource = ReadingType
 
 
 class AnalogLevelSensorDeviceConfig(CommonAnalogLevelSensorConfig):
@@ -64,11 +61,17 @@ class AnalogLevelSensorDeviceConfig(CommonAnalogLevelSensorConfig):
         ),
         position=18,
     )
+    # Superseded by the shared Reading Type element. Kept (hidden) so that
+    # existing deployments whose alarm tracked a specific reading keep doing so
+    # while Reading Type is left at "All Readings"; a specific Reading Type
+    # overrides it. See the ``alarm_source`` property.
     _alarm_source = config.Enum(
         "Alarm Source",
         choices=AlarmSource,
         default=AlarmSource.level,
-        description="Which reading the alarm tracks. Sets the slider's bounds and units.",
+        description="Deprecated: superseded by Reading Type.",
+        hidden=True,
+        deprecated=True,
         position=19,
     )
     _alarm_slider_min = config.Number(
@@ -112,9 +115,14 @@ class AnalogLevelSensorDeviceConfig(CommonAnalogLevelSensorConfig):
         return value if isinstance(value, AlarmType) else AlarmType(value)
 
     @property
-    def alarm_source(self) -> AlarmSource:
+    def alarm_source(self) -> ReadingType:
+        # A specific Reading Type drives the alarm; "All Readings" falls back to
+        # the deprecated Alarm Source so pre-existing alarms are unchanged.
+        reading_type = self.reading_type
+        if reading_type is not ReadingType.all:
+            return reading_type
         value = self._alarm_source.value
-        return value if isinstance(value, AlarmSource) else AlarmSource(value)
+        return value if isinstance(value, ReadingType) else ReadingType(value)
 
     @property
     def alarm_grace_period(self) -> float:
