@@ -40,7 +40,7 @@
                     ],
                     "x-required": false,
                     "description": "Which reading to display and alarm on: the level/depth, the filled percentage, or the volume. Focuses the UI on that single reading and points the alarm at it.",
-                    "default": null,
+                    "default": "Filled Percentage",
                     "x-position": 0
                 },
                 "sensor_maximum_metres": {
@@ -603,7 +603,7 @@
                     ],
                     "x-required": false,
                     "description": "Which reading to display and alarm on: the level/depth, the filled percentage, or the volume. Focuses the UI on that single reading and points the alarm at it.",
-                    "default": null,
+                    "default": "Filled Percentage",
                     "x-position": 0
                 },
                 "sensor_maximum_metres": {

@@ -41,9 +41,10 @@ class CommonAnalogLevelSensorUI(ui.UI):
     async def setup(self):
         self.volume.units = self.config.volume_units.value
 
-        # A specific reading type focuses the UI on that single reading; an
-        # unset Reading Type keeps the historic multi-reading layout so
-        # deployments that predate the Reading Type element are untouched.
+        # A resolved reading type focuses the UI on that single reading; a
+        # Reading Type that resolves to None (an explicit null in a legacy
+        # stored config) keeps the historic multi-reading layout. An omitted
+        # key resolves to the "Filled Percentage" default, not None.
         reading_type = self.config.reading_type
         if reading_type is None:
             self._setup_legacy_layout()

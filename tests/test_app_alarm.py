@@ -135,7 +135,8 @@ async def test_untouched_slider_does_not_crash_or_notify():
 
 @pytest.mark.asyncio
 async def test_greater_than_message():
-    app = StubApp(make_config(alarm=enabled_alarm()), StubUI(point=4.0))
+    config = make_config(alarm=enabled_alarm(), reading_type="Level Reading")
+    app = StubApp(config, StubUI(point=4.0))
 
     await app._check_alarm(MID_SCALE_MA)
 
@@ -164,7 +165,9 @@ async def test_notification_payload_matches_the_data_plane_contract():
 @pytest.mark.asyncio
 async def test_readings_are_rounded_to_two_decimal_places():
     # 12.8 mA -> 55.0% of a 4-20 mA span -> 5.5 m, and a bound of 1.23456 m
-    config = make_config(alarm=enabled_alarm(alarm_type="Less Than"))
+    config = make_config(
+        alarm=enabled_alarm(alarm_type="Less Than"), reading_type="Level Reading"
+    )
     app = StubApp(config, StubUI(point=6.98765))
 
     await app._check_alarm(12.8)
@@ -174,7 +177,9 @@ async def test_readings_are_rounded_to_two_decimal_places():
 
 @pytest.mark.asyncio
 async def test_less_than_message():
-    config = make_config(alarm=enabled_alarm(alarm_type="Less Than"))
+    config = make_config(
+        alarm=enabled_alarm(alarm_type="Less Than"), reading_type="Level Reading"
+    )
     app = StubApp(config, StubUI(point=6.0))
 
     await app._check_alarm(MID_SCALE_MA)
@@ -184,7 +189,9 @@ async def test_less_than_message():
 
 @pytest.mark.asyncio
 async def test_allowed_range_reports_the_crossed_bound_upward():
-    config = make_config(alarm=enabled_alarm(alarm_type="Allowed Range"))
+    config = make_config(
+        alarm=enabled_alarm(alarm_type="Allowed Range"), reading_type="Level Reading"
+    )
     app = StubApp(config, StubUI(alarm_range=[1.0, 4.0]))
 
     await app._check_alarm(MID_SCALE_MA)
@@ -194,7 +201,9 @@ async def test_allowed_range_reports_the_crossed_bound_upward():
 
 @pytest.mark.asyncio
 async def test_allowed_range_reports_the_crossed_bound_downward():
-    config = make_config(alarm=enabled_alarm(alarm_type="Allowed Range"))
+    config = make_config(
+        alarm=enabled_alarm(alarm_type="Allowed Range"), reading_type="Level Reading"
+    )
     app = StubApp(config, StubUI(alarm_range=[6.0, 9.0]))
 
     await app._check_alarm(MID_SCALE_MA)
@@ -204,7 +213,9 @@ async def test_allowed_range_reports_the_crossed_bound_downward():
 
 @pytest.mark.asyncio
 async def test_reversed_dual_slider_value_still_reads_correctly():
-    config = make_config(alarm=enabled_alarm(alarm_type="Allowed Range"))
+    config = make_config(
+        alarm=enabled_alarm(alarm_type="Allowed Range"), reading_type="Level Reading"
+    )
     app = StubApp(config, StubUI(alarm_range=[4.0, 1.0]))  # [high, low]
 
     await app._check_alarm(MID_SCALE_MA)
@@ -224,7 +235,9 @@ async def test_malformed_dual_slider_value_is_silent():
 
 @pytest.mark.asyncio
 async def test_reading_inside_the_range_is_silent():
-    config = make_config(alarm=enabled_alarm(alarm_type="Allowed Range"))
+    config = make_config(
+        alarm=enabled_alarm(alarm_type="Allowed Range"), reading_type="Level Reading"
+    )
     app = StubApp(config, StubUI(alarm_range=[1.0, 9.0]))
 
     await app._check_alarm(MID_SCALE_MA)
@@ -244,7 +257,10 @@ async def test_disabled_alarm_never_notifies_even_on_a_breach():
 
 @pytest.mark.asyncio
 async def test_percentage_source_alarms_on_filled_percentage():
-    config = make_config(alarm=enabled_alarm(alarm_source="Filled Percentage"))
+    # An explicit null Reading Type reaches the deprecated Alarm Source fallback.
+    config = make_config(
+        alarm=enabled_alarm(alarm_source="Filled Percentage"), reading_type=None
+    )
     app = StubApp(config, StubUI(point=40.0))
 
     await app._check_alarm(MID_SCALE_MA)
@@ -254,7 +270,8 @@ async def test_percentage_source_alarms_on_filled_percentage():
 
 @pytest.mark.asyncio
 async def test_volume_source_alarms_on_volume_in_configured_units():
-    config = make_config(alarm=enabled_alarm(alarm_source="Volume"))
+    # An explicit null Reading Type reaches the deprecated Alarm Source fallback.
+    config = make_config(alarm=enabled_alarm(alarm_source="Volume"), reading_type=None)
     app = StubApp(config, StubUI(point=400.0))
 
     await app._check_alarm(MID_SCALE_MA)
@@ -264,8 +281,10 @@ async def test_volume_source_alarms_on_volume_in_configured_units():
 
 @pytest.mark.asyncio
 async def test_unset_reading_type_keeps_the_legacy_alarm_source():
-    """An install with no reading_type key keeps its historic alarm source."""
-    config = make_config(alarm=enabled_alarm(alarm_source="Volume"))
+    """A legacy config carrying an explicit null Reading Type keeps its historic
+    alarm source. (An omitted key instead resolves to the default and does not
+    reach this fallback.)"""
+    config = make_config(alarm=enabled_alarm(alarm_source="Volume"), reading_type=None)
 
     assert config.reading_type is None
     assert config.alarm_source is ReadingType.volume
@@ -306,20 +325,26 @@ def test_alarm_value_tracks_the_configured_source():
         ("Filled Percentage", 50.0),
         ("Volume", 500.0),
     ]:
-        app = StubApp(make_config(alarm=enabled_alarm(alarm_source=source)), ui)
+        config = make_config(
+            alarm=enabled_alarm(alarm_source=source), reading_type=None
+        )
+        app = StubApp(config, ui)
         assert app._alarm_value(MID_SCALE_MA) == expected
 
 
 def test_slider_bounds_default_to_the_sources_own_span():
-    level = make_config(alarm=enabled_alarm())
+    # Explicit null Reading Type so the deprecated Alarm Source drives each span.
+    level = make_config(alarm=enabled_alarm(), reading_type=None)
     assert (level.alarm_slider_min, level.alarm_slider_max) == (0.0, 10.0)
     assert level.alarm_units == "m"
 
-    pct = make_config(alarm=enabled_alarm(alarm_source="Filled Percentage"))
+    pct = make_config(
+        alarm=enabled_alarm(alarm_source="Filled Percentage"), reading_type=None
+    )
     assert (pct.alarm_slider_min, pct.alarm_slider_max) == (0.0, 100.0)
     assert pct.alarm_units == "%"
 
-    vol = make_config(alarm=enabled_alarm(alarm_source="Volume"))
+    vol = make_config(alarm=enabled_alarm(alarm_source="Volume"), reading_type=None)
     assert (vol.alarm_slider_min, vol.alarm_slider_max) == (0.0, 1000.0)
     assert vol.alarm_units == "L"
 
@@ -334,6 +359,7 @@ def test_explicit_slider_bounds_override_the_source_span():
 def test_volume_source_full_scale_comes_from_the_curve_when_present():
     config = make_config(
         alarm=enabled_alarm(alarm_source="Volume"),
+        reading_type=None,
         volume_curve=[
             {"level": 0.0, "volume": 0.0},
             {"level": 10.0, "volume": 7500.0},
@@ -343,8 +369,11 @@ def test_volume_source_full_scale_comes_from_the_curve_when_present():
 
 
 def test_alarm_type_normalises_a_raw_string_to_a_member():
-    config = make_config(alarm=enabled_alarm(alarm_type="Allowed Range"))
+    config = make_config(
+        alarm=enabled_alarm(alarm_type="Allowed Range"), reading_type=None
+    )
     assert config.alarm_type is AlarmType.allowed_range
+    # Explicit null Reading Type falls back to the Alarm Source default (level).
     assert config.alarm_source is AlarmSource.level
 
 
@@ -357,7 +386,10 @@ async def test_deployment_config_without_alarm_keys_reads_as_disabled():
     assert config.alarm_grace_period == 30.0
     assert config.alarm_renotify_interval == 900.0
     assert config.alarm_type is AlarmType.greater_than
-    assert config.alarm_source is AlarmSource.level
+    # With no reading_type key, Reading Type resolves to the "Filled Percentage"
+    # default, so that (not the level default of the deprecated Alarm Source) is
+    # the reported source. The alarm is disabled regardless.
+    assert config.alarm_source is AlarmSource.percentage
 
     app = StubApp(config, StubUI(point=4.0))
     await app._check_alarm(MID_SCALE_MA)

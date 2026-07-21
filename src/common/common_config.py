@@ -9,12 +9,12 @@ class ReadingType(Enum):
     volume = "Volume"
 
 
-# Published as a list of plain strings (not the EnumType) so the element can
-# default to "unset" (None) without adding an "All Readings" sentinel to the
-# dropdown. An install that has never set Reading Type — every install created
-# before this element existed — reads back as None and falls back to the legacy
-# multi-reading layout and the deprecated Alarm Source, so deployed devices are
-# unchanged. Selecting one of the three focuses the UI and alarm on it.
+# Published as a list of plain strings (not the EnumType). Defaults to
+# "Filled Percentage": a null default fails schema validation against the
+# enum (null is not a member), which invalidates any config form containing
+# this app — e.g. a solution's Edit Config dialog — and disables its Save.
+# Installs that predate this element and read back as None still fall back
+# to the legacy multi-reading layout and the deprecated Alarm Source.
 _READING_TYPE_CHOICES = [rt.value for rt in ReadingType]
 
 
@@ -53,7 +53,7 @@ class CommonAnalogLevelSensorConfig(config.Schema):
         "Reading Type",
         name="reading_type",
         choices=_READING_TYPE_CHOICES,
-        default=None,
+        default=ReadingType.percentage.value,
         description=(
             "Which reading to display and alarm on: the level/depth, the filled "
             "percentage, or the volume. Focuses the UI on that single reading and "
@@ -163,8 +163,10 @@ class CommonAnalogLevelSensorConfig(config.Schema):
 
     @property
     def reading_type(self) -> "ReadingType | None":
-        """The selected reading type, or None if the operator has not chosen one
-        (in which case the legacy multi-reading layout and Alarm Source apply)."""
+        """The selected reading type, or None when the stored config carries an
+        explicit null (e.g. a legacy install predating this element), in which
+        case the legacy multi-reading layout and Alarm Source apply. An omitted
+        key resolves to the "Filled Percentage" default, not None."""
         value = self._reading_type.value
         if value is None or value == "":
             return None

@@ -61,10 +61,10 @@ class AnalogLevelSensorDeviceConfig(CommonAnalogLevelSensorConfig):
         ),
         position=18,
     )
-    # Superseded by the shared Reading Type element. Kept (hidden) so that
-    # existing deployments whose alarm tracked a specific reading keep doing so
-    # while Reading Type is left at "All Readings"; a specific Reading Type
-    # overrides it. See the ``alarm_source`` property.
+    # Superseded by the shared Reading Type element. Kept (hidden) so that a
+    # legacy stored config carrying an explicit null Reading Type keeps alarming
+    # on its historic source; any resolved Reading Type overrides it. See the
+    # ``alarm_source`` property.
     _alarm_source = config.Enum(
         "Alarm Source",
         choices=AlarmSource,
@@ -116,9 +116,10 @@ class AnalogLevelSensorDeviceConfig(CommonAnalogLevelSensorConfig):
 
     @property
     def alarm_source(self) -> ReadingType:
-        # A specific Reading Type drives the alarm; an unset Reading Type falls
-        # back to the deprecated Alarm Source so pre-existing alarms are
-        # unchanged.
+        # A resolved Reading Type drives the alarm; a Reading Type that resolves
+        # to None (an explicit null in a legacy stored config) falls back to the
+        # deprecated Alarm Source so pre-existing alarms are unchanged. An
+        # omitted key resolves to the default and does not reach this fallback.
         reading_type = self.reading_type
         if reading_type is not None:
             return reading_type
