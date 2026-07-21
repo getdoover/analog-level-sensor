@@ -263,11 +263,11 @@ async def test_volume_source_alarms_on_volume_in_configured_units():
 
 
 @pytest.mark.asyncio
-async def test_reading_type_defaults_to_all_and_alarm_keeps_the_legacy_source():
+async def test_unset_reading_type_keeps_the_legacy_alarm_source():
     """An install with no reading_type key keeps its historic alarm source."""
     config = make_config(alarm=enabled_alarm(alarm_source="Volume"))
 
-    assert config.reading_type is ReadingType.all
+    assert config.reading_type is None
     assert config.alarm_source is ReadingType.volume
 
     app = StubApp(config, StubUI(point=400.0))

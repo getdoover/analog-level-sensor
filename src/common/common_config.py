@@ -4,15 +4,18 @@ from pydoover import config
 
 
 class ReadingType(Enum):
-    # "All Readings" is the default and the backwards-compatible path: a
-    # deployment config written before this element existed has no reading_type
-    # key, so it falls back to this and keeps the historic multi-reading layout
-    # (and, on the device, the historic Alarm Source). The other three focus the
-    # UI on a single reading and point the alarm at that same reading.
-    all = "All Readings"
     level = "Level Reading"
     percentage = "Filled Percentage"
     volume = "Volume"
+
+
+# Published as a list of plain strings (not the EnumType) so the element can
+# default to "unset" (None) without adding an "All Readings" sentinel to the
+# dropdown. An install that has never set Reading Type — every install created
+# before this element existed — reads back as None and falls back to the legacy
+# multi-reading layout and the deprecated Alarm Source, so deployed devices are
+# unchanged. Selecting one of the three focuses the UI and alarm on it.
+_READING_TYPE_CHOICES = [rt.value for rt in ReadingType]
 
 
 class SensorType:
@@ -39,12 +42,12 @@ class CommonAnalogLevelSensorConfig(config.Schema):
     _reading_type = config.Enum(
         "Reading Type",
         name="reading_type",
-        choices=ReadingType,
-        default=ReadingType.all,
+        choices=_READING_TYPE_CHOICES,
+        default=None,
         description=(
-            "Which reading to display and alarm on. Choose Level Reading, Filled "
-            "Percentage or Volume to focus the UI on that single reading and point "
-            "the alarm at it. 'All Readings' shows every reading."
+            "Which reading to display and alarm on: the level/depth, the filled "
+            "percentage, or the volume. Focuses the UI on that single reading and "
+            "points the alarm at it."
         ),
         position=0,
     )
@@ -133,10 +136,12 @@ class CommonAnalogLevelSensorConfig(config.Schema):
     )
 
     @property
-    def reading_type(self) -> ReadingType:
-        # config.Enum yields a member when declared from an EnumType, but a raw
-        # string when the value arrives from an injected deployment config.
+    def reading_type(self) -> "ReadingType | None":
+        """The selected reading type, or None if the operator has not chosen one
+        (in which case the legacy multi-reading layout and Alarm Source apply)."""
         value = self._reading_type.value
+        if value is None or value == "":
+            return None
         return value if isinstance(value, ReadingType) else ReadingType(value)
 
 

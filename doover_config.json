@@ -27,7 +27,6 @@
             "properties": {
                 "reading_type": {
                     "enum": [
-                        "All Readings",
                         "Level Reading",
                         "Filled Percentage",
                         "Volume"
@@ -40,8 +39,8 @@
                         "null"
                     ],
                     "x-required": false,
-                    "description": "Which reading to display and alarm on. Choose Level Reading, Filled Percentage or Volume to focus the UI on that single reading and point the alarm at it. 'All Readings' shows every reading.",
-                    "default": "All Readings",
+                    "description": "Which reading to display and alarm on: the level/depth, the filled percentage, or the volume. Focuses the UI on that single reading and points the alarm at it.",
+                    "default": null,
                     "x-position": 0
                 },
                 "sensor_maximum_metres": {
@@ -312,7 +311,6 @@
                 },
                 "alarm_source": {
                     "enum": [
-                        "All Readings",
                         "Level Reading",
                         "Filled Percentage",
                         "Volume"
@@ -572,7 +570,6 @@
             "properties": {
                 "reading_type": {
                     "enum": [
-                        "All Readings",
                         "Level Reading",
                         "Filled Percentage",
                         "Volume"
@@ -585,8 +582,8 @@
                         "null"
                     ],
                     "x-required": false,
-                    "description": "Which reading to display and alarm on. Choose Level Reading, Filled Percentage or Volume to focus the UI on that single reading and point the alarm at it. 'All Readings' shows every reading.",
-                    "default": "All Readings",
+                    "description": "Which reading to display and alarm on: the level/depth, the filled percentage, or the volume. Focuses the UI on that single reading and points the alarm at it.",
+                    "default": null,
                     "x-position": 0
                 },
                 "sensor_maximum_metres": {

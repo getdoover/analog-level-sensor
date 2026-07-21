@@ -41,16 +41,16 @@ class CommonAnalogLevelSensorUI(ui.UI):
     async def setup(self):
         self.volume.units = self.config.volume_units.value
 
-        # A specific reading type focuses the UI on that single reading; the
-        # default "All Readings" keeps the historic multi-reading layout so
+        # A specific reading type focuses the UI on that single reading; an
+        # unset Reading Type keeps the historic multi-reading layout so
         # deployments that predate the Reading Type element are untouched.
         reading_type = self.config.reading_type
-        if reading_type is ReadingType.all:
-            self._setup_all_readings()
+        if reading_type is None:
+            self._setup_legacy_layout()
         else:
             self._setup_single_reading(reading_type)
 
-    def _setup_all_readings(self):
+    def _setup_legacy_layout(self):
         # With volume display disabled, keep the default layout: the percentage
         # level is the primary radial gauge, with the level reading below it.
         if self.config.hide_volume.value:

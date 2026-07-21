@@ -116,10 +116,11 @@ class AnalogLevelSensorDeviceConfig(CommonAnalogLevelSensorConfig):
 
     @property
     def alarm_source(self) -> ReadingType:
-        # A specific Reading Type drives the alarm; "All Readings" falls back to
-        # the deprecated Alarm Source so pre-existing alarms are unchanged.
+        # A specific Reading Type drives the alarm; an unset Reading Type falls
+        # back to the deprecated Alarm Source so pre-existing alarms are
+        # unchanged.
         reading_type = self.reading_type
-        if reading_type is not ReadingType.all:
+        if reading_type is not None:
             return reading_type
         value = self._alarm_source.value
         return value if isinstance(value, ReadingType) else ReadingType(value)
