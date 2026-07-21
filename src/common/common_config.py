@@ -30,6 +30,16 @@ class InputUnits:
     RAW = "raw"
 
 
+class DepthUnits:
+    # The value doubles as the display label; a consumer converts the metres the
+    # sensor works in into the chosen unit.
+    METRE = "m"
+    CENTIMETRE = "cm"
+    MILLIMETRE = "mm"
+    INCH = "in"
+    FOOT = "ft"
+
+
 class VolumeCurvePoint(config.Object):
     level = config.Number("Level", description="Level / depth in metres")
     volume = config.Number("Volume", description="Volume in configured volume units")
@@ -126,6 +136,22 @@ class CommonAnalogLevelSensorConfig(config.Schema):
         "Volume Units",
         description="Units to display the volume reading in (e.g. L, kL, gal)",
         default="L",
+        position=14,
+    )
+    depth_units = config.Enum(
+        "Depth Units",
+        choices=[
+            DepthUnits.METRE,
+            DepthUnits.CENTIMETRE,
+            DepthUnits.MILLIMETRE,
+            DepthUnits.INCH,
+            DepthUnits.FOOT,
+        ],
+        default=DepthUnits.METRE,
+        description=(
+            "Units to display the level/depth reading in. The sensor measures in "
+            "metres; consumers convert to this unit for display."
+        ),
         position=14,
     )
     volume_precision = config.Integer(

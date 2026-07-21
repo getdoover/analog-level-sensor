@@ -16,8 +16,10 @@ class CommonAnalogLevelSensorApplication:
         await self.tags.level_filled_percentage.set(self._filled_percentage(result))
         await self.tags.level_reading.set(self._level_reading(result))
         await self.tags.raw_level_reading.set(result)
-        if not self.config.hide_volume.value:
-            await self.tags.level_volume.set(self._volume(result))
+        # Always publish volume so peer apps (e.g. the HMI) can show it
+        # regardless of how this sensor's own UI is configured. hide_volume /
+        # Reading Type only affect this app's own gauge, not the data on the wire.
+        await self.tags.level_volume.set(self._volume(result))
 
     def _map_value(self, value, low_a, high_a, low_b, high_b, invert=False):
         if invert and self.config.type.value == SensorType.RADAR:

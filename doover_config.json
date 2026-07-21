@@ -230,6 +230,26 @@
                     "default": "L",
                     "x-position": 14
                 },
+                "depth_units": {
+                    "enum": [
+                        "m",
+                        "cm",
+                        "mm",
+                        "in",
+                        "ft"
+                    ],
+                    "title": "Depth Units",
+                    "x-name": "depth_units",
+                    "x-hidden": false,
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Units to display the level/depth reading in. The sensor measures in metres; consumers convert to this unit for display.",
+                    "default": "m",
+                    "x-position": 14
+                },
                 "volume_decimal_precision": {
                     "title": "Volume Decimal Precision",
                     "x-name": "volume_decimal_precision",
@@ -771,6 +791,26 @@
                     "x-required": false,
                     "description": "Units to display the volume reading in (e.g. L, kL, gal)",
                     "default": "L",
+                    "x-position": 14
+                },
+                "depth_units": {
+                    "enum": [
+                        "m",
+                        "cm",
+                        "mm",
+                        "in",
+                        "ft"
+                    ],
+                    "title": "Depth Units",
+                    "x-name": "depth_units",
+                    "x-hidden": false,
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Units to display the level/depth reading in. The sensor measures in metres; consumers convert to this unit for display.",
+                    "default": "m",
                     "x-position": 14
                 },
                 "volume_decimal_precision": {

@@ -68,3 +68,15 @@ async def test_handle_update_ignores_below_sensor_minimum():
     await app.handle_update(3.9)
 
     assert app.tags.raw_level_reading.value is None
+
+
+@pytest.mark.asyncio
+async def test_volume_is_published_even_when_hidden():
+    """Volume must reach the wire regardless of hide_volume so peer apps (the
+    HMI) can display it. hide_volume only affects this app's own gauge."""
+    app = FakeApp()
+    app.config.hide_volume = Value(True)
+
+    await app.handle_update(12.0)
+
+    assert app.tags.level_volume.value == 500.0
