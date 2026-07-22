@@ -31,7 +31,8 @@ class CommonAnalogLevelSensorUI(ui.UI):
     )
 
     volume = ui.NumericVariable(
-        "Volume",
+        "Tank Volume",
+        name="volume",  # keep the element key stable; only relabel the display
         units="L",
         value=CommonAnalogLevelSensorTags.level_volume,
         precision=0,

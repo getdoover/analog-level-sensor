@@ -481,7 +481,7 @@
                 "volume": {
                     "name": "volume",
                     "type": "uiVariable",
-                    "displayString": "Volume",
+                    "displayString": "Tank Volume",
                     "showActivity": true,
                     "position": 53,
                     "hidden": true,
@@ -941,7 +941,7 @@
                 "volume": {
                     "name": "volume",
                     "type": "uiVariable",
-                    "displayString": "Volume",
+                    "displayString": "Tank Volume",
                     "showActivity": true,
                     "position": 53,
                     "hidden": true,
