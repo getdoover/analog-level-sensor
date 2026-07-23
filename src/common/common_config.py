@@ -149,8 +149,10 @@ class CommonAnalogLevelSensorConfig(config.Schema):
         ],
         default=DepthUnits.METRE,
         description=(
-            "Units to display the level/depth reading in. The sensor measures in "
-            "metres; consumers convert to this unit for display."
+            "Display hint only. This app's own gauge and the level_reading tag "
+            "are ALWAYS in metres; this setting does not change them. Peer "
+            "consumers (e.g. the Petronash HMI) read this unit and convert the "
+            "canonical metres to it client-side for display."
         ),
         position=14,
     )
