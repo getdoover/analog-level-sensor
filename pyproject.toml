@@ -5,7 +5,7 @@ description = "Doover application for analog (4-20mA) level sensors"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "pydoover>=1.4.2",
+    "pydoover>=1.9.1",
 ]
 
 [project.scripts]
