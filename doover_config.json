@@ -12,13 +12,11 @@
             "platform_interface"
         ],
         "organisation_id": null,
-        "image_name": "registry.doover.com/apps/analog_level_sensor:main",
-        "container_registry_profile_id": "FIX-ME",
+        "image_name": "ghcr.io/getdoover/analog-level-sensor:main",
         "build_args": "--platform linux/amd64,linux/arm64",
         "staging_config": {
-            "container_registry_profile_id": "7369503425484439552",
             "id": 179478624141861898,
-            "image_name": "ghcr.io/getdoover/analog-level-sensor:main"
+            "image_name": "registry.staging.udoover.com/apps/analog_level_sensor:main"
         },
         "config_schema": {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
