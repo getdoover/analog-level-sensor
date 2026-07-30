@@ -13,11 +13,13 @@ env:
   # The only line to change when copying this workflow to another app repo. Needed
   # because a repo may define several apps and the CLI cannot prompt on a runner.
   DOOVER_APP_NAME: analog_level_sensor
-  # The registry is prod-backed, so the push authenticates against prod. The image
-  # reference itself comes from the app's doover_config.json via the login step --
-  # deliberately not repeated here, where it could drift from what is registered.
-  DOOVER_CONTROL_API_BASE_URL: https://api.doover.com
-  DOOVER_OIDC_AUDIENCE: https://api.doover.com
+  # The push job talks to prod, which is where the registry is backed -- and prod
+  # is what the CLI defaults to, so nothing else needs setting here. The release
+  # job overrides these per environment.
+  #
+  # The image reference comes from the app's doover_config.json via the login
+  # step, deliberately not repeated here where it could drift from what the
+  # application registers.
 
 jobs:
   lint:
