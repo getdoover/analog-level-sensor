@@ -10,13 +10,12 @@ on:
       - main
 
 env:
-  # Doover's own registry. Devices authenticate with their own token, so no
-  # registry password is distributed to the fleet.
-  REGISTRY: registry.doover.com
-  # The repository is derived from the application name, not the git repo -- note
-  # underscores, matching `Application.name`.
-  IMAGE_NAME: apps/analog_level_sensor
-  # The registry is prod-backed, so the push authenticates against prod.
+  # The only line to change when copying this workflow to another app repo. Needed
+  # because a repo may define several apps and the CLI cannot prompt on a runner.
+  DOOVER_APP_NAME: analog_level_sensor
+  # The registry is prod-backed, so the push authenticates against prod. The image
+  # reference itself comes from the app's doover_config.json via the login step --
+  # deliberately not repeated here, where it could drift from what is registered.
   DOOVER_CONTROL_API_BASE_URL: https://api.doover.com
   DOOVER_OIDC_AUDIENCE: https://api.doover.com
 
@@ -102,19 +101,21 @@ jobs:
       # name declares, so the app has to exist first. On a brand new repo this is
       # what creates it.
       - name: Publish app metadata to Doover
-        run: doover app publish --app-name analog_level_sensor --no-release
+        run: doover app publish --app-name "$DOOVER_APP_NAME" --no-release
 
       # Mints a credential scoped to this one repository and pipes it into
       # docker. Replaces the shared GITHUB_TOKEN login -- a compromised workflow
-      # can no longer touch any other app's images.
+      # can no longer touch any other app's images. Also outputs the image
+      # reference the app registered, which the build step tags from.
       - name: Log in to the Doover registry
-        run: doover app registry-login --app-name analog_level_sensor
+        id: registry
+        run: doover app registry-login --app-name "$DOOVER_APP_NAME"
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ steps.registry.outputs.image }}
 
       - name: Push Images
         id: push
@@ -165,14 +166,14 @@ jobs:
       # CLI prompts and aborts on a runner. Only the docker app is released here
       # -- the processor is a lambda and has no image digest to release against.
       - name: Publish app metadata to Doover
-        run: doover app publish --app-name analog_level_sensor
+        run: doover app publish --app-name "$DOOVER_APP_NAME"
 
       - name: Release a new application version
         env:
           RELEASE_NOTES: ${{ github.event.head_commit.message || github.event.pull_request.title }}
         run: >-
           doover app release
-          --app-name analog_level_sensor
+          --app-name "$DOOVER_APP_NAME"
           --digest "${{ needs.push_to_registries.outputs.digest }}"
           --commit "${{ github.event.pull_request.head.sha || github.sha }}"
           --notes "$RELEASE_NOTES"
