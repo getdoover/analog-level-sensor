@@ -10,8 +10,9 @@ on:
       - main
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  # The only line to change when copying this workflow to another app repo: a repo
+  # may define several apps and the CLI cannot prompt on a runner.
+  DOOVER_APP_NAME: analog_level_sensor
 
 jobs:
   lint:
@@ -70,7 +71,6 @@ jobs:
     outputs:
       digest: ${{ steps.push.outputs.digest }}
     permissions:
-      packages: write
       contents: read
       id-token: write
     steps:
@@ -80,18 +80,48 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to the Container registry
-        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          python-version: "3.11"
+
+      - name: Install Doover CLI
+        run: uv tool install doover-cli
+
+      # Publish before pushing: the registry credential is minted against this
+      # application's publish permission and scoped to the repository its image
+      # name declares, so the app has to exist first. On a new repo this creates it.
+      #
+      # Done for both environments because each has its own registry, and one build
+      # is pushed to both so the digest they release is identical.
+      - name: Publish and log in (production)
+        id: prod
+        env:
+          DOOVER_CONTROL_API_BASE_URL: https://api.doover.com
+          DOOVER_OIDC_AUDIENCE: https://api.doover.com
+        run: |
+          doover app publish --app-name "$DOOVER_APP_NAME" --no-release
+          doover app registry-login --app-name "$DOOVER_APP_NAME"
+
+      - name: Publish and log in (staging)
+        id: staging
+        env:
+          DOOVER_CONTROL_API_BASE_URL: https://api.staging.udoover.com
+          DOOVER_OIDC_AUDIENCE: https://api.staging.udoover.com
+        run: |
+          doover app publish --app-name "$DOOVER_APP_NAME" --no-release
+          doover app registry-login --app-name "$DOOVER_APP_NAME"
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: |
+            ${{ steps.prod.outputs.image }}
+            ${{ steps.staging.outputs.image }}
 
       - name: Push Images
         id: push
@@ -104,22 +134,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
-
-      - name: Sign image (key-pair, offline-verifiable)
-        env:
-          COSIGN_PRIVATE_KEY: ${{ secrets.DOOVER_PUBLIC_COSIGN_PRIVATE_KEY }}
-          COSIGN_PASSWORD: ""
-          COSIGN_EXPERIMENTAL: "1"
-          DIGEST: ${{ steps.push.outputs.digest }}
-        run: |
-          # Sign by digest (covers every tag pointing at this manifest) with
-          # the tlog upload disabled so the app controller can verify fully
-          # offline on edge devices.
-          cosign sign --yes --tlog-upload=false --registry-referrers-mode oci-1-1 \
-            --key env://COSIGN_PRIVATE_KEY \
-            "${REGISTRY}/${IMAGE_NAME}@${DIGEST}"
 
   release:
     name: Release to Doover (${{ matrix.environment }})
@@ -158,14 +172,14 @@ jobs:
       # CLI prompts and aborts on a runner. Only the docker app is released here
       # -- the processor is a lambda and has no image digest to release against.
       - name: Publish app metadata to Doover
-        run: doover app publish --app-name analog_level_sensor
+        run: doover app publish --app-name "$DOOVER_APP_NAME"
 
       - name: Release a new application version
         env:
           RELEASE_NOTES: ${{ github.event.head_commit.message || github.event.pull_request.title }}
         run: >-
           doover app release
-          --app-name analog_level_sensor
+          --app-name "$DOOVER_APP_NAME"
           --digest "${{ needs.push_to_registries.outputs.digest }}"
           --commit "${{ github.event.pull_request.head.sha || github.sha }}"
           --notes "$RELEASE_NOTES"
