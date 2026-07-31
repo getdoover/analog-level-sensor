@@ -16,10 +16,10 @@ def test_import_app():
 
 
 def test_import_processor_app():
+    from analog_level_sensor_processor import handler
     from analog_level_sensor_processor.application import (
         AnalogLevelSensorProcessorApplication,
     )
-    from analog_level_sensor_processor import handler
 
     assert AnalogLevelSensorProcessorApplication
     assert handler
@@ -30,7 +30,9 @@ def test_config():
         AnalogLevelSensorConfig,
         AnalogLevelSensorDeviceConfig,
     )
-    from analog_level_sensor_processor.app_config import AnalogLevelSensorProcessorConfig
+    from analog_level_sensor_processor.app_config import (
+        AnalogLevelSensorProcessorConfig,
+    )
     from common.common_config import CommonAnalogLevelSensorConfig
 
     assert isinstance(AnalogLevelSensorConfig.to_schema(), dict)

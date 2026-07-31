@@ -10,7 +10,6 @@ from .app_config import AnalogLevelSensorProcessorConfig
 from .app_tags import AnalogLevelSensorProcessorTags
 from .app_ui import AnalogLevelSensorProcessorUI
 
-
 log = logging.getLogger(__name__)
 
 

@@ -3,7 +3,6 @@ from pydoover import ui
 from .common_config import ReadingType
 from .common_tags import CommonAnalogLevelSensorTags
 
-
 # Boundary between the "Low" and "Good" colour bands, as a fraction of the
 # gauge's full-scale value. Used for both the percentage and volume gauges so
 # the two stay visually consistent.
