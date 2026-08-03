@@ -7,7 +7,6 @@ from .app_config import AlarmSource, AnalogLevelSensorDeviceConfig
 from .app_tags import AnalogLevelSensorDeviceTags
 from .app_ui import AnalogLevelSensorDeviceUI
 
-
 # The data plane deserialises severity as the serde variant name, not the int
 # value that pydoover.models.NotificationSeverity carries.
 NOTIFICATION_SEVERITY_WARN = "Warn"

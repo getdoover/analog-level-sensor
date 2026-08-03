@@ -10,7 +10,6 @@ from common.common_config import (
 
 from .alarm import AlarmType
 
-
 # The alarm now tracks the shared Reading Type. AlarmSource is retained as an
 # alias so the deprecated fallback field and existing imports keep working.
 AlarmSource = ReadingType

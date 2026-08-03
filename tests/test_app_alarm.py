@@ -6,16 +6,13 @@ carries none of the alarm keys.
 """
 
 import pytest
-
 from pydoover.config import NotSet
-
-from common.common_app import CommonAnalogLevelSensorApplication
-from common.common_config import ReadingType
 
 from analog_level_sensor.alarm import Alarm, AlarmType
 from analog_level_sensor.app_config import AlarmSource, AnalogLevelSensorDeviceConfig
 from analog_level_sensor.application import AnalogLevelSensorDeviceApplication as App
-
+from common.common_app import CommonAnalogLevelSensorApplication
+from common.common_config import ReadingType
 
 UNSET = object()
 
