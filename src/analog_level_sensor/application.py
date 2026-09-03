@@ -66,7 +66,10 @@ class AnalogLevelSensorDeviceApplication(
             return self._filled_percentage(result)
         if source is AlarmSource.volume:
             return self._volume(result)
-        return self._level_reading(result)
+        # The slider bounds and the notification message are both in the
+        # configured depth unit, so compare on that scale rather than in the
+        # canonical metres level_reading carries.
+        return self.config.metres_to_depth_units(self._level_reading(result))
 
     @staticmethod
     def _slider_value(slider):

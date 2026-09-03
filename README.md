@@ -42,6 +42,14 @@ Key capabilities:
 | **Power Pin** | Digital output pin to power the sensor | `null` |
 | **Sensor Type** | Submersible / Radar / Radar Inverted | `Submersible` |
 | **Volume Curve** | Array of level/volume points for interpolation | `[]` |
+| **Depth Units** | Unit for the Level Reading gauge, alarm slider and alarm message (`m`/`cm`/`mm`/`in`/`ft`). The `level_reading` tag stays in metres | `m` |
+
+> **Changing Depth Units resets a level alarm's setpoint.** The Alarm Point / Allowed
+> Range sliders are stored per depth unit, so switching units presents a fresh, unset
+> slider on the new scale instead of reinterpreting the old number in the new unit
+> (which would turn a 8 m setpoint into 8 mm). The alarm stays quiet until the point is
+> set again; switching back to the previous unit restores the setpoint it had there.
+> Alarms on Filled Percentage or Volume are unaffected.
 
 Processor-only configuration:
 
@@ -58,7 +66,8 @@ Processor-only configuration:
 | Tag | Type | Description |
 |-----|------|-------------|
 | **level_filled_percentage** | number | Fill percentage (0-100+%) |
-| **level_reading** | number | Calculated level in metres |
+| **level_reading** | number | Calculated level in metres (canonical -- peer apps read this) |
+| **level_reading_display** | number | Calculated level converted to the configured Depth Units, for this app's own gauge |
 | **raw_level_reading** | number | Raw analog reading in the configured input units |
 | **level_volume** | number | Calculated volume, when enabled |
 

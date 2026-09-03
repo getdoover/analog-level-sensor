@@ -12,4 +12,3 @@ def export():
         Path(__file__).parents[2] / "doover_config.json",
         "analog_level_sensor_processor",
     )
-

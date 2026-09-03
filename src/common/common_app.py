@@ -13,8 +13,17 @@ class CommonAnalogLevelSensorApplication:
         if result is None or result < self.config.sensor_min_mA.value:
             return
 
+        level = self._level_reading(result)
+
         await self.tags.level_filled_percentage.set(self._filled_percentage(result))
-        await self.tags.level_reading.set(self._level_reading(result))
+        # level_reading is canonical metres: peer apps (sia-local-control,
+        # cylindrical-tank) consume it and do their own scaling. The UI gauge
+        # can't scale a $tag reference in the browser, so the configured-unit
+        # copy is published alongside it rather than replacing it.
+        await self.tags.level_reading.set(level)
+        await self.tags.level_reading_display.set(
+            self.config.metres_to_depth_units(level)
+        )
         await self.tags.raw_level_reading.set(result)
         # Always publish volume so peer apps (e.g. the HMI) can show it
         # regardless of how this sensor's own UI is configured. hide_volume /
