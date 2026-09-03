@@ -1,6 +1,6 @@
 from pydoover import ui
 
-from .common_config import ReadingType
+from .common_config import DepthUnits, ReadingType
 from .common_tags import CommonAnalogLevelSensorTags
 
 # Boundary between the "Low" and "Good" colour bands, as a fraction of the
@@ -40,6 +40,7 @@ class CommonAnalogLevelSensorUI(ui.UI):
 
     async def setup(self):
         self.volume.units = self.config.volume_units.value
+        self._setup_depth_units()
 
         # A resolved reading type focuses the UI on that single reading; a
         # Reading Type that resolves to None (an explicit null in a legacy
@@ -50,6 +51,21 @@ class CommonAnalogLevelSensorUI(ui.UI):
             self._setup_legacy_layout()
         else:
             self._setup_single_reading(reading_type)
+
+    def _setup_depth_units(self):
+        """Show the level reading in the configured depth unit.
+
+        The element's value is a ``$tag`` reference the browser resolves against
+        tag_values, so the gauge can't scale metres itself. For a non-metre unit
+        point it at the pre-converted display tag instead; on metres keep the
+        class-level binding to level_reading so existing installs keep the plot
+        history already logged against it.
+        """
+        self.level_reading.units = self.config.depth_unit
+        self.level_reading.precision = self.config.depth_unit_precision
+
+        if self.config.depth_unit != DepthUnits.METRE:
+            self.level_reading.value = CommonAnalogLevelSensorTags.level_reading_display
 
     def _setup_legacy_layout(self):
         # With volume display disabled, keep the default layout: the percentage
@@ -97,7 +113,9 @@ class CommonAnalogLevelSensorUI(ui.UI):
             ]
             self.volume.position = 10
         else:  # ReadingType.level
-            full = float(self.config.full_level.value)
+            # The gauge reads in the configured depth unit, so its bands have to
+            # be scaled out of the metres Full Level is configured in.
+            full = float(self.config.full_level.value) * self.config.depth_unit_factor
             self.level_reading.hidden = False
             self.level_reading.form = ui.Widget.radial
             if full > 0:

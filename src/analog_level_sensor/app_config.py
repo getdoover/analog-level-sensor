@@ -76,13 +76,21 @@ class AnalogLevelSensorDeviceConfig(CommonAnalogLevelSensorConfig):
     _alarm_slider_min = config.Number(
         "Alarm Slider Minimum",
         default=None,
-        description="Lower bound of the alarm point slider. Defaults to the alarm source's minimum.",
+        description=(
+            "Lower bound of the alarm point slider, in the alarm's display units "
+            "(the units shown on the slider; Depth Units for a level alarm). "
+            "Defaults to the alarm source's minimum."
+        ),
         position=20,
     )
     _alarm_slider_max = config.Number(
         "Alarm Slider Maximum",
         default=None,
-        description="Upper bound of the alarm point slider. Defaults to the alarm source's maximum.",
+        description=(
+            "Upper bound of the alarm point slider, in the alarm's display units "
+            "(the units shown on the slider; Depth Units for a level alarm). "
+            "Defaults to the alarm source's maximum."
+        ),
         position=21,
     )
     _alarm_grace_period = config.Number(
@@ -140,7 +148,8 @@ class AnalogLevelSensorDeviceConfig(CommonAnalogLevelSensorConfig):
             return "%"
         if source is AlarmSource.volume:
             return self.volume_units.value
-        return "m"
+        # A level alarm is shown, and set, in the same unit as the gauge.
+        return self.depth_unit
 
     @property
     def alarm_slider_min(self) -> float:
@@ -159,7 +168,13 @@ class AnalogLevelSensorDeviceConfig(CommonAnalogLevelSensorConfig):
             return 0.0, 100.0
         if source is AlarmSource.volume:
             return 0.0, self._full_scale_volume()
-        return float(self.sensor_min_m.value), float(self.sensor_max_m.value)
+        # The sensor span is configured in metres; the slider reads in the
+        # configured depth unit, so convert the span onto that scale.
+        factor = self.depth_unit_factor
+        return (
+            float(self.sensor_min_m.value) * factor,
+            float(self.sensor_max_m.value) * factor,
+        )
 
     def _full_scale_volume(self) -> float:
         curve = self.volume_curve.elements

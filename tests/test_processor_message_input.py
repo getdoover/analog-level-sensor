@@ -5,7 +5,11 @@ import pytest
 from analog_level_sensor_processor.application import (
     AnalogLevelSensorProcessorApplication,
 )
-from common.common_config import SensorType
+from common.common_config import (
+    CommonAnalogLevelSensorConfig,
+    DepthUnits,
+    SensorType,
+)
 
 
 class Value:
@@ -30,6 +34,14 @@ class FakeConfig:
     volume_curve = VolumeCurve()
     hide_volume = Value(False)
     max_volume = Value(1000.0)
+    depth_units = Value(DepthUnits.METRE)
+
+    # Borrow the real conversion helpers rather than mirroring them, so this
+    # stub can't drift from the config the app actually runs against.
+    depth_unit = CommonAnalogLevelSensorConfig.depth_unit
+    depth_unit_factor = CommonAnalogLevelSensorConfig.depth_unit_factor
+    depth_unit_precision = CommonAnalogLevelSensorConfig.depth_unit_precision
+    metres_to_depth_units = CommonAnalogLevelSensorConfig.metres_to_depth_units
 
 
 class FakeTag:
@@ -44,6 +56,7 @@ class FakeTags:
     def __init__(self):
         self.level_filled_percentage = FakeTag()
         self.level_reading = FakeTag()
+        self.level_reading_display = FakeTag()
         self.raw_level_reading = FakeTag()
         self.level_volume = FakeTag()
 

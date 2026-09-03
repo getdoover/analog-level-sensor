@@ -40,6 +40,27 @@ class DepthUnits:
     FOOT = "ft"
 
 
+# Multiply canonical metres by these to reach each display unit. Keyed by the
+# unit string so a value read straight out of a deployment config can be used.
+DEPTH_UNIT_FACTORS = {
+    DepthUnits.METRE: 1.0,
+    DepthUnits.CENTIMETRE: 100.0,
+    DepthUnits.MILLIMETRE: 1000.0,
+    DepthUnits.INCH: 39.37007874,
+    DepthUnits.FOOT: 3.280839895,
+}
+
+# Decimal places that read sensibly at each unit's scale: a millimetre reading
+# has no useful fraction, where a metre reading needs two.
+DEPTH_UNIT_PRECISION = {
+    DepthUnits.METRE: 2,
+    DepthUnits.CENTIMETRE: 1,
+    DepthUnits.MILLIMETRE: 0,
+    DepthUnits.INCH: 1,
+    DepthUnits.FOOT: 2,
+}
+
+
 class VolumeCurvePoint(config.Object):
     level = config.Number("Level", description="Level / depth in metres")
     volume = config.Number("Volume", description="Volume in configured volume units")
@@ -149,10 +170,15 @@ class CommonAnalogLevelSensorConfig(config.Schema):
         ],
         default=DepthUnits.METRE,
         description=(
-            "Display hint only. This app's own gauge and the level_reading tag "
-            "are ALWAYS in metres; this setting does not change them. Peer "
-            "consumers (e.g. the Petronash HMI) read this unit and convert the "
-            "canonical metres to it client-side for display."
+            "Units for the Level Reading gauge, and, when Reading Type is Level "
+            "Reading, for the alarm slider and alarm message. The level_reading "
+            "tag itself stays in metres for peer consumers (e.g. the Petronash "
+            "HMI); a copy converted to this unit is published as the "
+            "level_reading_display tag. Changing this unit gives a level alarm "
+            "a fresh, unset Alarm Point slider on the new scale rather than "
+            "reinterpreting the old setpoint as the new unit: the alarm stays "
+            "quiet until the point is set again. Each unit keeps its own "
+            "setpoint, so changing back restores the previous one."
         ),
         position=14,
     )
@@ -173,6 +199,35 @@ class CommonAnalogLevelSensorConfig(config.Schema):
         if value is None or value == "":
             return None
         return value if isinstance(value, ReadingType) else ReadingType(value)
+
+    @property
+    def depth_unit(self) -> str:
+        """The configured depth unit. Falls back to metres when the stored value
+        is null, empty or a unit this app doesn't know, so a legacy deployment
+        config can't take the gauge, the alarm slider or the conversion down
+        with it."""
+        value = self.depth_units.value
+        if value in DEPTH_UNIT_FACTORS:
+            return value
+        return DepthUnits.METRE
+
+    @property
+    def depth_unit_factor(self) -> float:
+        """Multiplier from canonical metres to the configured depth unit."""
+        return DEPTH_UNIT_FACTORS[self.depth_unit]
+
+    @property
+    def depth_unit_precision(self) -> int:
+        """Decimal places to display the configured depth unit to."""
+        return DEPTH_UNIT_PRECISION[self.depth_unit]
+
+    def metres_to_depth_units(self, value: float | None) -> float | None:
+        """Convert canonical metres into the configured depth unit. None passes
+        through so an unavailable reading stays unavailable rather than
+        becoming a zero."""
+        if value is None:
+            return None
+        return value * self.depth_unit_factor
 
 
 CommonConfig = CommonAnalogLevelSensorConfig
