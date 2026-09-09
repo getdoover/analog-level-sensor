@@ -5,13 +5,14 @@ description = "Doover application for analog (4-20mA) level sensors"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "pydoover>=1.4.2",
+    "pydoover>=1.17.1",
 ]
 
 [project.scripts]
 doover-app-run = "analog_level_sensor:main"
 export-config = "analog_level_sensor.app_config:export"
 export-ui = "analog_level_sensor.app_ui:export"
+export-notifications = "analog_level_sensor.app_notifications:export"
 export-config-processor = "analog_level_sensor_processor.app_config:export"
 export-ui-processor = "analog_level_sensor_processor.app_ui:export"
 
