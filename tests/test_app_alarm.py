@@ -7,9 +7,13 @@ carries none of the alarm keys.
 
 import pytest
 from pydoover.config import NotSet
+from pydoover.models import NotificationSeverity
 
 from analog_level_sensor.alarm import Alarm, AlarmType
 from analog_level_sensor.app_config import AlarmSource, AnalogLevelSensorDeviceConfig
+from analog_level_sensor.app_notifications import (
+    AnalogLevelSensorDeviceNotifications,
+)
 from analog_level_sensor.app_ui import AnalogLevelSensorDeviceUI
 from analog_level_sensor.application import AnalogLevelSensorDeviceApplication as App
 from common.common_app import CommonAnalogLevelSensorApplication
@@ -113,10 +117,18 @@ class StubApp(CommonAnalogLevelSensorApplication):
         self.ui = ui
         self.alarm = alarm or Alarm(grace_period=0.0, renotify_interval=0.0)
         self.published = []
+        # The real declarations, bound to this stub, so the tests exercise the
+        # topic and severity the app actually sends rather than a copy of them.
+        self.notifications = AnalogLevelSensorDeviceNotifications(
+            "analog_level_sensor_1", self
+        )
 
     @property
-    def notifications(self):
+    def sent_messages(self):
         return [data["message"] for _channel, data in self.published]
+
+    async def send_notification(self, message, **kwargs):
+        self.published.append(("notifications", {"message": message, **kwargs}))
 
     async def create_message(self, channel_name, data):
         self.published.append((channel_name, data))
@@ -128,7 +140,7 @@ async def test_untouched_slider_does_not_crash_or_notify():
 
     await app._check_alarm(MID_SCALE_MA)
 
-    assert app.notifications == []
+    assert app.sent_messages == []
 
 
 @pytest.mark.asyncio
@@ -138,16 +150,17 @@ async def test_greater_than_message():
 
     await app._check_alarm(MID_SCALE_MA)
 
-    assert app.notifications == ["Tank has exceeded 4 m with a value of 5 m"]
+    assert app.sent_messages == ["Tank has exceeded 4 m with a value of 5 m"]
 
 
 @pytest.mark.asyncio
-async def test_notification_payload_matches_the_data_plane_contract():
-    """severity must be the serde variant name, not the int pydoover emits.
+async def test_notification_carries_the_canonical_topic():
+    """The topic is what the site filters on, per notification.
 
-    An int fails to deserialise server-side, and the server then falls back to
-    sending the whole JSON payload as the message body. Omitting the title makes
-    the server substitute the agent's display name.
+    Sending without one puts the notification in the legacy bucket, where a
+    subscriber can only take every app notification or none of them. The
+    string is spelled out rather than rebuilt from the declaration because it
+    is a contract shared with the API and the subscription editor.
     """
     app = StubApp(make_config(alarm=enabled_alarm()), StubUI(point=4.0))
 
@@ -155,9 +168,13 @@ async def test_notification_payload_matches_the_data_plane_contract():
 
     channel, payload = app.published[0]
     assert channel == "notifications"
-    assert payload["severity"] == "Warn"
-    assert "title" not in payload
-    assert set(payload) == {"message", "severity"}
+    assert (
+        str(payload["topic"])
+        == "dev/applications/default/analog_level_sensor_1/level_alarm"
+    )
+    assert payload["severity"] is NotificationSeverity.Warn
+    # No title: the server substitutes the agent's display name.
+    assert payload["title"] is None
 
 
 @pytest.mark.asyncio
@@ -170,7 +187,7 @@ async def test_readings_are_rounded_to_two_decimal_places():
 
     await app._check_alarm(12.8)
 
-    assert app.notifications == ["Tank has dropped below 6.99 m with a value of 5.5 m"]
+    assert app.sent_messages == ["Tank has dropped below 6.99 m with a value of 5.5 m"]
 
 
 @pytest.mark.asyncio
@@ -182,7 +199,7 @@ async def test_less_than_message():
 
     await app._check_alarm(MID_SCALE_MA)
 
-    assert app.notifications == ["Tank has dropped below 6 m with a value of 5 m"]
+    assert app.sent_messages == ["Tank has dropped below 6 m with a value of 5 m"]
 
 
 @pytest.mark.asyncio
@@ -194,7 +211,7 @@ async def test_allowed_range_reports_the_crossed_bound_upward():
 
     await app._check_alarm(MID_SCALE_MA)
 
-    assert app.notifications == ["Tank has exceeded 4 m with a value of 5 m"]
+    assert app.sent_messages == ["Tank has exceeded 4 m with a value of 5 m"]
 
 
 @pytest.mark.asyncio
@@ -206,7 +223,7 @@ async def test_allowed_range_reports_the_crossed_bound_downward():
 
     await app._check_alarm(MID_SCALE_MA)
 
-    assert app.notifications == ["Tank has dropped below 6 m with a value of 5 m"]
+    assert app.sent_messages == ["Tank has dropped below 6 m with a value of 5 m"]
 
 
 @pytest.mark.asyncio
@@ -218,7 +235,7 @@ async def test_reversed_dual_slider_value_still_reads_correctly():
 
     await app._check_alarm(MID_SCALE_MA)
 
-    assert app.notifications == ["Tank has exceeded 4 m with a value of 5 m"]
+    assert app.sent_messages == ["Tank has exceeded 4 m with a value of 5 m"]
 
 
 @pytest.mark.asyncio
@@ -228,7 +245,7 @@ async def test_malformed_dual_slider_value_is_silent():
 
     await app._check_alarm(MID_SCALE_MA)
 
-    assert app.notifications == []
+    assert app.sent_messages == []
 
 
 @pytest.mark.asyncio
@@ -240,7 +257,7 @@ async def test_reading_inside_the_range_is_silent():
 
     await app._check_alarm(MID_SCALE_MA)
 
-    assert app.notifications == []
+    assert app.sent_messages == []
 
 
 @pytest.mark.asyncio
@@ -250,7 +267,7 @@ async def test_disabled_alarm_never_notifies_even_on_a_breach():
 
     await app._check_alarm(MID_SCALE_MA)
 
-    assert app.notifications == []
+    assert app.sent_messages == []
 
 
 @pytest.mark.asyncio
@@ -263,7 +280,7 @@ async def test_percentage_source_alarms_on_filled_percentage():
 
     await app._check_alarm(MID_SCALE_MA)
 
-    assert app.notifications == ["Tank has exceeded 40 % with a value of 50 %"]
+    assert app.sent_messages == ["Tank has exceeded 40 % with a value of 50 %"]
 
 
 @pytest.mark.asyncio
@@ -274,7 +291,7 @@ async def test_volume_source_alarms_on_volume_in_configured_units():
 
     await app._check_alarm(MID_SCALE_MA)
 
-    assert app.notifications == ["Tank has exceeded 400 L with a value of 500 L"]
+    assert app.sent_messages == ["Tank has exceeded 400 L with a value of 500 L"]
 
 
 @pytest.mark.asyncio
@@ -289,7 +306,7 @@ async def test_unset_reading_type_keeps_the_legacy_alarm_source():
 
     app = StubApp(config, StubUI(point=400.0))
     await app._check_alarm(MID_SCALE_MA)
-    assert app.notifications == ["Tank has exceeded 400 L with a value of 500 L"]
+    assert app.sent_messages == ["Tank has exceeded 400 L with a value of 500 L"]
 
 
 @pytest.mark.asyncio
@@ -299,7 +316,7 @@ async def test_specific_reading_type_drives_the_alarm():
 
     await app._check_alarm(MID_SCALE_MA)
 
-    assert app.notifications == ["Tank has exceeded 40 % with a value of 50 %"]
+    assert app.sent_messages == ["Tank has exceeded 40 % with a value of 50 %"]
 
 
 def test_specific_reading_type_overrides_the_legacy_alarm_source():
@@ -391,7 +408,7 @@ async def test_deployment_config_without_alarm_keys_reads_as_disabled():
 
     app = StubApp(config, StubUI(point=4.0))
     await app._check_alarm(MID_SCALE_MA)
-    assert app.notifications == []
+    assert app.sent_messages == []
 
 
 @pytest.mark.asyncio
@@ -405,12 +422,12 @@ async def test_level_alarm_compares_in_the_configured_depth_units():
     # 12 mA -> 5 m -> 5000 mm, under the 6000 mm point
     quiet = StubApp(config, StubUI(point=6000.0))
     await quiet._check_alarm(MID_SCALE_MA)
-    assert quiet.notifications == []
+    assert quiet.sent_messages == []
 
     # 16 mA -> 7.5 m -> 7500 mm, over it
     loud = StubApp(config, StubUI(point=6000.0))
     await loud._check_alarm(16.0)
-    assert loud.notifications == ["Tank has exceeded 6000 mm with a value of 7500 mm"]
+    assert loud.sent_messages == ["Tank has exceeded 6000 mm with a value of 7500 mm"]
 
 
 def test_level_slider_span_and_units_follow_the_depth_units():
@@ -478,7 +495,7 @@ async def test_a_metre_setpoint_is_not_reread_as_the_new_depth_unit():
     app = StubApp(config, ui)
     await app._check_alarm(MID_SCALE_MA)  # 5 m == 5000 mm
 
-    assert app.notifications == []
+    assert app.sent_messages == []
     # the mm slider is a different element, so the metres value is left alone
     assert ui.alarm_point.name == "alarm_point_mm"
     assert ui.alarm_point.to_dict()["currentValue"] == "$cmds.app().alarm_point_mm"
@@ -492,7 +509,7 @@ async def test_a_metre_range_is_not_reread_as_the_new_depth_unit():
     app = StubApp(config, ui)
     await app._check_alarm(MID_SCALE_MA)
 
-    assert app.notifications == []
+    assert app.sent_messages == []
     assert ui.alarm_range.name == "alarm_range_mm"
 
 
@@ -504,7 +521,7 @@ async def test_a_setpoint_set_in_the_configured_unit_alarms_on_that_scale():
     app = StubApp(config, ui)
     await app._check_alarm(MID_SCALE_MA)
 
-    assert app.notifications == ["Tank has exceeded 4000 mm with a value of 5000 mm"]
+    assert app.sent_messages == ["Tank has exceeded 4000 mm with a value of 5000 mm"]
 
 
 @pytest.mark.asyncio
@@ -520,7 +537,7 @@ async def test_a_metre_install_keeps_reading_its_existing_setpoint():
     await app._check_alarm(MID_SCALE_MA)
 
     assert ui.alarm_point.name == "alarm_point"
-    assert app.notifications == ["Tank has exceeded 4 m with a value of 5 m"]
+    assert app.sent_messages == ["Tank has exceeded 4 m with a value of 5 m"]
 
 
 @pytest.mark.asyncio
@@ -536,4 +553,4 @@ async def test_a_percentage_alarm_keeps_its_setpoint_whatever_the_depth_unit():
     await app._check_alarm(MID_SCALE_MA)
 
     assert ui.alarm_point.name == "alarm_point"
-    assert app.notifications == ["Tank has exceeded 40 % with a value of 50 %"]
+    assert app.sent_messages == ["Tank has exceeded 40 % with a value of 50 %"]

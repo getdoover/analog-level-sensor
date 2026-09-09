@@ -4,12 +4,9 @@ from common.common_app import CommonAnalogLevelSensorApplication
 
 from .alarm import Alarm, AlarmType, evaluate
 from .app_config import AlarmSource, AnalogLevelSensorDeviceConfig
+from .app_notifications import AnalogLevelSensorDeviceNotifications
 from .app_tags import AnalogLevelSensorDeviceTags
 from .app_ui import AnalogLevelSensorDeviceUI
-
-# The data plane deserialises severity as the serde variant name, not the int
-# value that pydoover.models.NotificationSeverity carries.
-NOTIFICATION_SEVERITY_WARN = "Warn"
 
 
 class AnalogLevelSensorDeviceApplication(
@@ -22,6 +19,7 @@ class AnalogLevelSensorDeviceApplication(
     config_cls = AnalogLevelSensorDeviceConfig
     tags_cls = AnalogLevelSensorDeviceTags
     ui_cls = AnalogLevelSensorDeviceUI
+    notifications_cls = AnalogLevelSensorDeviceNotifications
 
     async def setup(self):
         if self.config.power_pin.value is not None:
@@ -108,19 +106,10 @@ class AnalogLevelSensorDeviceApplication(
         )
 
         if self.alarm.update(breach):
-            # Publish the payload directly rather than via send_notification().
-            # pydoover's Notification.to_dict() writes severity as the enum's int
-            # value (Warn -> 6), but the data plane deserialises it as the serde
-            # variant name ("Warn"). An int fails to deserialise, and the server
-            # then falls back to sending the whole JSON payload as the message
-            # body. Omitting the title makes the server use the agent's display
-            # name, which is the device name.
-            await self.create_message(
-                "notifications",
-                {
-                    "message": self._alarm_message(reading, breach),
-                    "severity": NOTIFICATION_SEVERITY_WARN,
-                },
+            # No title: the server substitutes the agent's display name, which
+            # is the device name and is what an operator expects to see.
+            await self.notifications.level_alarm.send(
+                self._alarm_message(reading, breach)
             )
 
     @staticmethod
