@@ -17,7 +17,8 @@
         "staging_config": {
             "id": 179478624141861898,
             "image_name": "registry.staging.udoover.com/apps/analog_level_sensor:main"
-        }
+        },
+        "icon_url": "https://cdn.jsdelivr.net/gh/getdoover/app-icons@8c12abb194b9239150c9ecd1b7f516f41d27ddd7/icons/analog_level_sensor.png"
     },
     "analog_level_sensor_processor": {
         "name": "analog_level_sensor_processor",
