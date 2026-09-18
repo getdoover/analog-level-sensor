@@ -42,6 +42,7 @@
             "Architectures": [
                 "arm64"
             ]
-        }
+        },
+        "icon_url": "https://cdn.jsdelivr.net/gh/getdoover/app-icons@b8426724af383efeea4549cfb4b6c3d868446196/icons/analog_level_sensor_processor.png"
     }
 }
