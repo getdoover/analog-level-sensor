@@ -5,6 +5,8 @@ from .common_config import SensorType
 
 log = logging.getLogger(__name__)
 
+WATER_DENSITY = 1000.0  # kg/m³
+
 
 class CommonAnalogLevelSensorApplication:
     async def handle_update(self, result):
@@ -49,13 +51,27 @@ class CommonAnalogLevelSensorApplication:
 
     def _level_reading(self, reading) -> float:
         perc = self._sensor_percentage(reading)
-        return self._map_value(
+        level = self._map_value(
             perc,
             0,
             100,
             self.config.sensor_min_m.value,
             self.config.sensor_max_m.value,
         )
+        if self.config.type.value == SensorType.SUBMERSIBLE:
+            # Scale only the fluid column; sensor_min_m is the sensor's mounting
+            # height above the tank floor and does not depend on the fluid.
+            offset = self.config.sensor_min_m.value
+            level = offset + (level - offset) * WATER_DENSITY / self._fluid_density()
+        return level
+
+    def _fluid_density(self) -> float:
+        # Older deployment configs predate this field; fall back to water.
+        value = getattr(self.config, "fluid_density", None)
+        density = None if value is None else value.value
+        if density is None or float(density) <= 0:
+            return WATER_DENSITY
+        return float(density)
 
     def _filled_percentage(self, reading) -> float | None:
         lev = self._level_reading(reading)

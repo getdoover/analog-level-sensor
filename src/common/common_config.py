@@ -117,7 +117,7 @@ class CommonAnalogLevelSensorConfig(config.Schema):
     )
     sensor_min_m = config.Number(
         "Sensor Minimum Metres",
-        description="Minimum sensor depth (m)",
+        description="Minimum sensor depth (m). For submersible sensors, the sensor's mounting height above the tank floor",
         default=0.0,
         position=6,
     )
@@ -133,6 +133,17 @@ class CommonAnalogLevelSensorConfig(config.Schema):
         description="Type of sensor. Radar inverted reads like a submersible sensor.",
         choices=[SensorType.SUBMERSIBLE, SensorType.RADAR, SensorType.RADAR_INV],
         default=SensorType.SUBMERSIBLE,
+        position=10,
+    )
+    fluid_density = config.Number(
+        "Fluid Density",
+        description=(
+            "Density of the measured fluid (kg/m³). Submersible (pressure) sensors "
+            "are ranged in metres of water, so readings are scaled by 1000 / density. "
+            "Ignored for radar sensors. Defaults to water."
+        ),
+        default=1000.0,
+        minimum=1.0,
         position=10,
     )
     volume_curve = config.Array(
