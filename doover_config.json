@@ -96,7 +96,7 @@
                         "null"
                     ],
                     "x-required": false,
-                    "description": "Minimum sensor depth (m)",
+                    "description": "Minimum sensor depth (m). For submersible sensors, the sensor's mounting height above the tank floor",
                     "default": 0.0,
                     "x-position": 6
                 },
@@ -130,6 +130,20 @@
                     "description": "Type of sensor. Radar inverted reads like a submersible sensor.",
                     "default": "Submersible",
                     "x-position": 10
+                },
+                "fluid_density": {
+                    "title": "Fluid Density",
+                    "x-name": "fluid_density",
+                    "x-hidden": false,
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Density of the measured fluid (kg/m\u00b3). Submersible (pressure) sensors are ranged in metres of water, so readings are scaled by 1000 / density. Ignored for radar sensors. Defaults to water.",
+                    "default": 1000.0,
+                    "x-position": 10,
+                    "minimum": 1.0
                 },
                 "volume_curve": {
                     "title": "Volume Curve",
@@ -620,7 +634,7 @@
                         "null"
                     ],
                     "x-required": false,
-                    "description": "Minimum sensor depth (m)",
+                    "description": "Minimum sensor depth (m). For submersible sensors, the sensor's mounting height above the tank floor",
                     "default": 0.0,
                     "x-position": 6
                 },
@@ -654,6 +668,20 @@
                     "description": "Type of sensor. Radar inverted reads like a submersible sensor.",
                     "default": "Submersible",
                     "x-position": 10
+                },
+                "fluid_density": {
+                    "title": "Fluid Density",
+                    "x-name": "fluid_density",
+                    "x-hidden": false,
+                    "type": [
+                        "number",
+                        "null"
+                    ],
+                    "x-required": false,
+                    "description": "Density of the measured fluid (kg/m\u00b3). Submersible (pressure) sensors are ranged in metres of water, so readings are scaled by 1000 / density. Ignored for radar sensors. Defaults to water.",
+                    "default": 1000.0,
+                    "x-position": 10,
+                    "minimum": 1.0
                 },
                 "volume_curve": {
                     "title": "Volume Curve",

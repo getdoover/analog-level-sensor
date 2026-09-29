@@ -41,6 +41,7 @@ Key capabilities:
 | **Empty Level** | Level reading when empty (m) | `0.0` |
 | **Power Pin** | Digital output pin to power the sensor | `null` |
 | **Sensor Type** | Submersible / Radar / Radar Inverted | `Submersible` |
+| **Fluid Density** | Fluid density (kg/m³); scales submersible readings from metres of water to metres of fluid. Ignored for radar | `1000.0` (water) |
 | **Volume Curve** | Array of level/volume points for interpolation | `[]` |
 
 Processor-only configuration:

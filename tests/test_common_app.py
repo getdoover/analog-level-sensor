@@ -68,3 +68,44 @@ async def test_handle_update_ignores_below_sensor_minimum():
     await app.handle_update(3.9)
 
     assert app.tags.raw_level_reading.value is None
+
+
+class DenseConfig(FakeConfig):
+    fluid_density = Value(1250.0)
+
+
+class DenseRadarConfig(DenseConfig):
+    type = Value(SensorType.RADAR_INV)
+
+
+def test_level_defaults_to_water_when_density_missing():
+    # FakeConfig has no fluid_density, like a deployment config predating it.
+    assert FakeApp()._level_reading(12.0) == 5.0
+
+
+def test_submersible_level_scaled_by_fluid_density():
+    app = FakeApp()
+    app.config = DenseConfig()
+
+    # 5 m of water column / SG 1.25 = 4 m of fluid.
+    assert app._level_reading(12.0) == pytest.approx(4.0)
+
+
+def test_radar_level_ignores_fluid_density():
+    app = FakeApp()
+    app.config = DenseRadarConfig()
+
+    assert app._level_reading(12.0) == 5.0
+
+
+class DenseOffsetConfig(DenseConfig):
+    sensor_min_m = Value(0.015)
+    sensor_max_m = Value(10.015)
+
+
+def test_density_scaling_leaves_mounting_offset_alone():
+    app = FakeApp()
+    app.config = DenseOffsetConfig()
+
+    # 15 mm offset + (5 m water column / SG 1.25).
+    assert app._level_reading(12.0) == pytest.approx(4.015)
