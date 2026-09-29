@@ -150,3 +150,31 @@ def test_density_scaling_leaves_mounting_offset_alone():
 
     # 15 mm offset + (5 m water column / SG 1.25).
     assert app._level_reading(12.0) == pytest.approx(4.015)
+
+
+class CurvePoint:
+    def __init__(self, level, volume):
+        self.level = Value(level)
+        self.volume = Value(volume)
+
+
+CURVE = [CurvePoint(0.0, 0.0), CurvePoint(0.1, 77.66), CurvePoint(0.83, 1019.76)]
+
+
+def test_volume_interpolates_within_the_curve():
+    vol = CommonAnalogLevelSensorApplication._get_volume(0.05, CURVE)
+    assert vol == pytest.approx(38.83)
+
+
+def test_volume_extrapolates_past_the_curve_ends():
+    above = CommonAnalogLevelSensorApplication._get_volume(0.9, CURVE)
+    below = CommonAnalogLevelSensorApplication._get_volume(-0.1, CURVE)
+    assert above > 1019.76
+    assert below < 0.0
+
+
+def test_volume_curve_order_does_not_matter():
+    shuffled = [CURVE[2], CURVE[0], CURVE[1]]
+    assert CommonAnalogLevelSensorApplication._get_volume(
+        0.05, shuffled
+    ) == pytest.approx(38.83)

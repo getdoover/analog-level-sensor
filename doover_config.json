@@ -8,6 +8,7 @@
         "allow_many": true,
         "description": "App for analog (4-20mA) level sensors. Both radar and submersible sensors are supported.",
         "long_description": "README.md",
+        "icon_url": "https://cdn.jsdelivr.net/gh/getdoover/app-icons@8c12abb194b9239150c9ecd1b7f516f41d27ddd7/icons/analog_level_sensor.png",
         "depends_on": [
             "platform_interface"
         ],
@@ -15,12 +16,11 @@
         "image_name": "registry.doover.com/apps/analog_level_sensor:main",
         "build_args": "--platform linux/amd64,linux/arm64",
         "staging_config": {
-            "id": 179478624141861898,
-            "image_name": "registry.staging.udoover.com/apps/analog_level_sensor:main"
-        },
-        "icon_url": "https://cdn.jsdelivr.net/gh/getdoover/app-icons@8c12abb194b9239150c9ecd1b7f516f41d27ddd7/icons/analog_level_sensor.png"
+            "id": 179478624141861898
+        }
     },
     "analog_level_sensor_processor": {
+        "id": 193235363894938628,
         "name": "analog_level_sensor_processor",
         "display_name": "Analog Level Sensor Processor",
         "type": "PRO",
@@ -28,11 +28,10 @@
         "allow_many": true,
         "description": "Processor for converting remote analog 4-20mA readings into level, percentage, and volume tags.",
         "long_description": "README.md",
+        "icon_url": "https://cdn.jsdelivr.net/gh/getdoover/app-icons@b8426724af383efeea4549cfb4b6c3d868446196/icons/analog_level_sensor_processor.png",
+        "organisation_id": null,
         "export_config_command": "export-config-processor",
         "export_ui_command": "export-ui-processor",
-        "run_command": null,
-        "organisation_id": null,
-        "id": 193235363894938628,
         "lambda_config": {
             "Environment": {},
             "Runtime": "python3.13",
@@ -42,7 +41,6 @@
             "Architectures": [
                 "arm64"
             ]
-        },
-        "icon_url": "https://cdn.jsdelivr.net/gh/getdoover/app-icons@b8426724af383efeea4549cfb4b6c3d868446196/icons/analog_level_sensor_processor.png"
+        }
     }
 }

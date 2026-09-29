@@ -110,7 +110,7 @@ class CommonAnalogLevelSensorApplication:
         )
 
         # Interpolate within the curve.
-        for (x1, y1), (x2, y2) in itertools.pairwise(points, points[1:]):
+        for (x1, y1), (x2, y2) in itertools.pairwise(points):
             if x1 <= level <= x2:
                 return y1 + (level - x1) * (y2 - y1) / (x2 - x1)
 
