@@ -108,7 +108,29 @@ class AnalogLevelSensorDeviceConfig(CommonAnalogLevelSensorConfig):
         position=23,
     )
 
+    # Off by default so an existing deployment behaves exactly as before: the
+    # "Sensor Calibration" submodule stays hidden, its RPCs are refused and its
+    # readback tags are never published. See calibration.py.
+    _operator_calibration_enabled = config.Boolean(
+        "Operator Sensor Calibration",
+        name="operator_calibration_enabled",
+        default=False,
+        description=(
+            "Let operators set the zero (minimum level), span (maximum level) "
+            "and fluid density on site, from the Sensor Calibration section of "
+            "this app and the local HMI, without a redeploy. The Sensor Minimum "
+            "Metres, Sensor Maximum Metres and Fluid Density above become the "
+            "defaults that Reset to configured values returns to."
+        ),
+        position=24,
+    )
+
     position = ApplicationPosition(position=16)
+
+    @property
+    def operator_calibration_enabled(self) -> bool:
+        # Absent from deployment configs written before the field existed.
+        return bool(self._operator_calibration_enabled.value)
 
     @property
     def alarm_enabled(self) -> bool:

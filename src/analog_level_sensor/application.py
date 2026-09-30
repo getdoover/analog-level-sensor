@@ -1,7 +1,10 @@
+from pydoover import ui
 from pydoover.docker import Application
+from pydoover.rpc import RPCError
 
 from common.common_app import CommonAnalogLevelSensorApplication
 
+from . import calibration
 from .alarm import Alarm, AlarmType, evaluate
 from .app_config import AlarmSource, AnalogLevelSensorDeviceConfig
 from .app_notifications import AnalogLevelSensorDeviceNotifications
@@ -34,7 +37,14 @@ class AnalogLevelSensorDeviceApplication(
             renotify_interval=self.config.alarm_renotify_interval,
         )
 
+        # Before the first reading: an offline reboot restores the operator
+        # calibration from its readback tags, which a publish would overwrite.
+        self.calibration = calibration.SensorCalibration(self)
+        await self.calibration.startup()
+
     async def main_loop(self):
+        await self.calibration.maintain()
+
         result = await self.platform_iface.fetch_ai(int(self.config.ai_pin.value))
 
         if self.config.power_pin.value is not None:
@@ -48,10 +58,66 @@ class AnalogLevelSensorDeviceApplication(
         # The shared handler drops under-range samples before writing any tag,
         # so keep the alarm blind to them too rather than alarming on a reading
         # the rest of the app has decided not to trust.
-        if result is None or result < self.config.sensor_min_mA.value:
+        if result is None:
+            return
+        if result < self.config.sensor_min_mA.value:
+            if self._calibration_active():
+                # The HMI Sensor tab shows the live loop current from this tag,
+                # and a sensor at or just below its zero (empty tank, broken
+                # loop) is exactly when an operator sets the zero, so the tag
+                # must not freeze at the last in-range reading. The level,
+                # percentage, volume and alarm still skip the sample.
+                await self.tags.raw_level_reading.set(result)
             return
 
         await self._check_alarm(result)
+
+    # -- Operator Sensor Calibration (calibration.py) ---------------------------
+    # The 4-20 mA conversion (common_app._level_reading) runs on these, so the
+    # level, display, percentage, volume and alarm all follow the operator's
+    # values. With the feature off they are the config, exactly as before.
+
+    def _calibration_active(self) -> bool:
+        return (
+            self.config.operator_calibration_enabled
+            and getattr(self, "calibration", None) is not None
+        )
+
+    def _zero_m(self):
+        if self._calibration_active():
+            return self.calibration.effective().zero_m
+        return super()._zero_m()
+
+    def _span_m(self):
+        if self._calibration_active():
+            return self.calibration.effective().span_m
+        return super()._span_m()
+
+    def _fluid_density(self) -> float:
+        if self._calibration_active():
+            return self.calibration.effective().fluid_density
+        return super()._fluid_density()
+
+    @ui.handler(calibration.RPC_PATTERN, auto_update=False)
+    async def on_calibration_value(self, ctx, value):
+        """``zero_m`` / ``span_m`` / ``fluid_density`` from the cloud input or
+        the HMI. No ``parser=float``: pydoover reports a parser exception as
+        INTERNAL_ERROR, so the value is parsed here and a non-numeric one gets
+        INVALID like an out-of-range one. The value is stored by the request
+        itself (``auto_update=False``), so a refused one leaves ui_cmds as is."""
+        applied = await self._sensor_calibration().request(ctx.method, value)
+        return {ctx.method: applied}
+
+    @ui.handler(calibration.RESET_ELEMENT, auto_update=False)
+    async def on_reset_calibration(self, ctx, value):
+        return await self._sensor_calibration().reset()
+
+    def _sensor_calibration(self) -> calibration.SensorCalibration:
+        # ui_cmds is subscribed before setup() creates it.
+        setting = getattr(self, "calibration", None)
+        if setting is None:
+            raise RPCError("UNAVAILABLE", "the sensor app is still starting")
+        return setting
 
     async def on_shutdown_at(self, _seconds: int):
         if self.config.power_pin.value is not None:

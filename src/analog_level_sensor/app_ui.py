@@ -1,8 +1,9 @@
 from pydoover import ui
 
-from common.common_config import DepthUnits
+from common.common_config import DepthUnits, SensorType
 from common.common_ui import CommonAnalogLevelSensorUI
 
+from . import calibration
 from .alarm import AlarmType
 from .app_config import AlarmSource
 
@@ -17,6 +18,33 @@ def _alarm_slider(display_name: str, name: str, dual_slider: bool) -> ui.Slider:
     )
 
 
+def _calibration_labels(low=4, high=20, units="mA", radar=False) -> dict[str, str]:
+    """Input labels; the endpoints are the configured input range.
+
+    The zero is the minimum level and the span the maximum level. A Radar reads
+    inverted (common_app._sensor_percentage), so its zero is the level at the
+    maximum input and its span the level at the minimum input.
+    """
+    units = f" {units}" if units else ""
+    zero_at, span_at = (high, low) if radar else (low, high)
+    return {
+        calibration.ZERO.name: f"Zero - level at {zero_at:g}{units} (m)",
+        calibration.SPAN.name: f"Span - level at {span_at:g}{units} (m)",
+        calibration.DENSITY.name: "Fluid Density (kg/m³)",
+    }
+
+
+def _calibration_input(spec: calibration.CalibrationValue) -> ui.FloatInput:
+    # The RPC handler validates the value (including zero < span); min / max
+    # here only guide the input. The default follows the config in setup.
+    return ui.FloatInput(
+        _calibration_labels()[spec.name],
+        name=spec.name,
+        min_val=spec.minimum,
+        max_val=spec.maximum,
+    )
+
+
 class AnalogLevelSensorDeviceUI(CommonAnalogLevelSensorUI):
     # A single slider reports a number and a dual slider reports [low, high], so
     # each mode gets its own element. One element toggling dual_slider would
@@ -24,9 +52,52 @@ class AnalogLevelSensorDeviceUI(CommonAnalogLevelSensorUI):
     alarm_point = _alarm_slider("Alarm Point", "alarm_point", dual_slider=False)
     alarm_range = _alarm_slider("Allowed Range", "alarm_range", dual_slider=True)
 
+    # Operator Sensor Calibration (calibration.py): hidden unless the config
+    # field enables it, so an existing deployment's UI is unchanged.
+    sensor_calibration = ui.Submodule(
+        "Sensor Calibration",
+        children=[
+            *(_calibration_input(spec) for spec in calibration.VALUES),
+            ui.Button(
+                "Reset to configured values",
+                name=calibration.RESET_ELEMENT,
+                requires_confirm=True,
+            ),
+        ],
+        hidden=True,
+        name="sensor_calibration",
+    )
+
     async def setup(self):
         await super().setup()
         self._setup_alarm()
+        self._setup_calibration()
+
+    def _setup_calibration(self):
+        if not self.config.operator_calibration_enabled:
+            return
+        self.sensor_calibration.hidden = False
+        radar = self.config.type.value == SensorType.RADAR
+        try:
+            labels = _calibration_labels(
+                float(self.config.sensor_min_mA.value),
+                float(self.config.sensor_max_mA.value),
+                self.config.input_units.value or "",
+                radar=radar,
+            )
+        except (TypeError, ValueError):
+            labels = _calibration_labels(radar=radar)
+        for spec in calibration.VALUES:
+            element = getattr(self.sensor_calibration, spec.name)
+            element.display_name = labels[spec.name]
+            default = spec.config_default(self.config)
+            if default is None:
+                continue
+            # Each input shows its config default until an operator sets one.
+            element.default = round(default, calibration.DECIMALS)
+            # pydoover bakes the class default into the element's currentValue
+            # fallback ("$cmds.app().<name>::<default>"); keep it in step.
+            element._value_location = f"$cmds.app().{spec.name}::{element.default}"
 
     def _setup_alarm(self):
         alarm_type = self.config.alarm_type

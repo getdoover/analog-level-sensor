@@ -8,6 +8,17 @@ log = logging.getLogger(__name__)
 WATER_DENSITY = 1000.0  # kg/m³
 
 
+def config_fluid_density(config) -> float:
+    """The configured fluid density (kg/m³). Older deployment configs predate
+    the field, and a null or non-positive value is not a density: both fall
+    back to water."""
+    value = getattr(config, "fluid_density", None)
+    density = None if value is None else value.value
+    if density is None or float(density) <= 0:
+        return WATER_DENSITY
+    return float(density)
+
+
 class CommonAnalogLevelSensorApplication:
     async def handle_update(self, result):
         log.info(f"Level sensor reading: {result}")
@@ -51,27 +62,29 @@ class CommonAnalogLevelSensorApplication:
 
     def _level_reading(self, reading) -> float:
         perc = self._sensor_percentage(reading)
-        level = self._map_value(
-            perc,
-            0,
-            100,
-            self.config.sensor_min_m.value,
-            self.config.sensor_max_m.value,
-        )
+        zero = self._zero_m()
+        level = self._map_value(perc, 0, 100, zero, self._span_m())
         if self.config.type.value == SensorType.SUBMERSIBLE:
-            # Scale only the fluid column; sensor_min_m is the sensor's mounting
+            # Scale only the fluid column; the zero is the sensor's mounting
             # height above the tank floor and does not depend on the fluid.
-            offset = self.config.sensor_min_m.value
-            level = offset + (level - offset) * WATER_DENSITY / self._fluid_density()
+            level = zero + (level - zero) * WATER_DENSITY / self._fluid_density()
         return level
 
+    # The three values the 4-20 mA conversion runs on. The device app overrides
+    # these with the operator's calibration when Operator Sensor Calibration is
+    # enabled; otherwise (and in the processor) they are the deployment config.
+    def _zero_m(self) -> float:
+        """The minimum level (m): at the minimum input (4 mA), or at the
+        maximum input (20 mA) for a Radar, which reads inverted."""
+        return self.config.sensor_min_m.value
+
+    def _span_m(self) -> float:
+        """The maximum level (m): at the maximum input (20 mA), or at the
+        minimum input (4 mA) for a Radar, which reads inverted."""
+        return self.config.sensor_max_m.value
+
     def _fluid_density(self) -> float:
-        # Older deployment configs predate this field; fall back to water.
-        value = getattr(self.config, "fluid_density", None)
-        density = None if value is None else value.value
-        if density is None or float(density) <= 0:
-            return WATER_DENSITY
-        return float(density)
+        return config_fluid_density(self.config)
 
     def _filled_percentage(self, reading) -> float | None:
         lev = self._level_reading(reading)
