@@ -25,6 +25,12 @@ class AnalogLevelSensorProcessorApplication(
     tags_cls = AnalogLevelSensorProcessorTags
     ui_cls = AnalogLevelSensorProcessorUI
 
+    # Each message is a new invocation with a fresh instance, so a debounce
+    # count would never build up: each sample decides. Whether the input was
+    # already in fault (so the log fires once) is carried by the sensor_fault
+    # tag.
+    fault_debounce_samples = 1
+
     async def setup(self):
         self._input_channel, self._input_path = self._parse_input_message_path(
             self.config.input_message_path.value

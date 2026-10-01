@@ -35,6 +35,9 @@ TAG_NAMES = [
     "span_m",
     "fluid_density",
     "operator_calibration",
+    "sensor_fault",
+    "sensor_fault_hidden",
+    "sensor_fault_message",
 ]
 CALIBRATION_TAGS = ["zero_m", "span_m", "fluid_density", "operator_calibration"]
 
@@ -731,25 +734,108 @@ def test_write_before_a_late_sync_wins_and_is_stored_again():
     assert app.calibration.effective().span_m == 6.0
 
 
-# -- live loop current for the HMI Sensor tab --------------------------------------------
+# -- live loop current for the HMI Sensor tab, and the sensor fault ----------------------
+
+UNDER_RANGE = 3.73  # the live skid: a 4-20 mA sensor below its 3.8 mA fault limit
 
 
+def run_samples(app, *readings):
+    for reading in readings:
+        run(app.handle_update(reading))
+
+
+def record_alarm_checks(app):
+    """Wrap the real alarm check so a test can see which readings reached it."""
+    checked = []
+    real = app._check_alarm
+
+    async def check(reading):
+        checked.append(reading)
+        await real(reading)
+
+    app._check_alarm = check
+    return checked
+
+
+@pytest.mark.parametrize("enabled", [True, False])
 @pytest.mark.parametrize("reading", [3.9, 0.0])
-def test_under_range_loop_current_is_published_when_on(reading):
-    app = run(started(make_config(enabled=True)))
+def test_under_range_loop_current_is_published(enabled, reading):
+    """The HMI Sensor tab shows the live loop current from this tag, and a
+    sensor at or below its zero is exactly when an operator sets the zero, so
+    it must not freeze at the last in-range reading, calibration on or off."""
+    app = run(started(make_config(enabled=enabled)))
     run(app.handle_update(12.0))
-    level = app.tags.store["level_reading"]
     run(app.handle_update(reading))
     assert app.tags.store["raw_level_reading"] == reading
-    # Nothing derived from the untrusted sample.
-    assert app.tags.store["level_reading"] == level
 
 
-def test_under_range_loop_current_is_dropped_when_off():
-    app = run(started(make_config()))
+@pytest.mark.parametrize("enabled", [True, False])
+def test_one_fault_level_sample_changes_nothing_derived(enabled):
+    app = run(started(make_config(enabled=enabled)))
+    checked = record_alarm_checks(app)
     run(app.handle_update(12.0))
+    run(app.handle_update(0.0))
+    assert app.tags.store["level_reading"] == pytest.approx(5.0)
+    assert app.tags.store["sensor_fault"] is None
+    assert checked == [12.0]
+
+
+def test_steady_under_range_faults_and_keeps_the_alarm_blind():
+    app = run(started(make_config()))
+    checked = record_alarm_checks(app)
+
+    run_samples(app, 12.0, UNDER_RANGE, UNDER_RANGE, UNDER_RANGE, UNDER_RANGE)
+
+    assert app.tags.store["sensor_fault"] == "under_range"
+    assert app.tags.store["raw_level_reading"] == UNDER_RANGE
+    for name in (
+        "level_filled_percentage",
+        "level_reading",
+        "level_reading_display",
+        "level_volume",
+    ):
+        assert app.tags.store[name] is None
+    # Only the in-range sample reached the alarm.
+    assert checked == [12.0]
+
+
+def test_clamp_band_alarms_on_the_clamped_reading():
+    app = run(started(make_config()))
+    checked = record_alarm_checks(app)
     run(app.handle_update(3.9))
-    assert app.tags.store["raw_level_reading"] == 12.0
+    assert checked == [4.0]
+
+
+def test_calibration_still_works_through_a_fault():
+    """The operator zero drives the clamp band, a fault clears the level whatever
+    the calibration, the readbacks keep publishing, and an RPC still applies."""
+    app = run(started(make_config(enabled=True)))
+    run(app.calibration.request("zero_m", 1.0))
+    app.echo()
+
+    # The clamp band reads as the operator zero (the level at 4 mA).
+    run(app.handle_update(3.9))
+    assert app.tags.store["level_reading"] == pytest.approx(1.0)
+
+    for _ in range(3):
+        run(app.calibration.maintain())
+        run(app.handle_update(UNDER_RANGE))
+    assert app.tags.store["sensor_fault"] == "under_range"
+    assert app.tags.store["level_reading"] is None
+    assert app.tags.store["raw_level_reading"] == UNDER_RANGE
+    assert app.tags.store["zero_m"] == 1.0
+    assert app.tags.store["operator_calibration"] is True
+
+    # An operator can set the zero mid-fault; it applies once the input recovers.
+    run(app.calibration.request("zero_m", 2.0))
+    app.echo()
+    run_samples(app, 4.0, 4.0, 4.0)
+    assert app.tags.store["sensor_fault"] is None
+    assert app.tags.store["level_reading"] == pytest.approx(2.0)
+
+
+def test_device_tags_declare_the_sensor_fault_live():
+    assert AnalogLevelSensorDeviceTags.sensor_fault.live is True
 
 
 # -- the processor variant ---------------------------------------------------------------
