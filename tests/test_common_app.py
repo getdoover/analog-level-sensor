@@ -1,6 +1,8 @@
+import logging
+
 import pytest
 
-from common.common_app import CommonAnalogLevelSensorApplication
+from common.common_app import FAULT_DEBOUNCE_SAMPLES, CommonAnalogLevelSensorApplication
 from common.common_config import (
     CommonAnalogLevelSensorConfig,
     DepthUnits,
@@ -40,8 +42,11 @@ class FakeConfig:
 
 
 class FakeTag:
-    def __init__(self):
-        self.value = None
+    def __init__(self, value=None):
+        self.value = value
+
+    def get(self):
+        return self.value
 
     async def set(self, value):
         self.value = value
@@ -54,6 +59,9 @@ class FakeTags:
         self.level_reading_display = FakeTag()
         self.raw_level_reading = FakeTag()
         self.level_volume = FakeTag()
+        self.sensor_fault = FakeTag()
+        self.sensor_fault_hidden = FakeTag(True)
+        self.sensor_fault_message = FakeTag()
 
 
 class FakeApp(CommonAnalogLevelSensorApplication):
@@ -77,13 +85,163 @@ async def test_handle_update_writes_level_tags():
     assert app.tags.level_reading_display.value == 5.0
 
 
+# -- under range: the clamp band and the sensor fault --------------------------------
+
+UNDER_RANGE = 3.73  # the live skid: below the 3.8 mA fault limit of a 4 mA zero
+LEVEL_TAGS = (
+    "level_filled_percentage",
+    "level_reading",
+    "level_reading_display",
+    "level_volume",
+)
+
+
+async def feed(app, *readings):
+    for reading in readings:
+        await app.handle_update(reading)
+
+
+def level_values(app):
+    return [getattr(app.tags, name).value for name in LEVEL_TAGS]
+
+
+def test_the_debounce_is_three_samples():
+    assert FAULT_DEBOUNCE_SAMPLES == 3
+
+
 @pytest.mark.asyncio
-async def test_handle_update_ignores_below_sensor_minimum():
+@pytest.mark.parametrize("reading", [3.9, 3.8, 3.95])
+async def test_clamp_band_reads_as_empty_not_a_fault(reading):
+    """Up to 0.2 below the minimum input is a healthy sensor at its zero (an
+    empty tank): 0 %, published, no fault, and the raw value as read."""
     app = FakeApp()
 
-    await app.handle_update(3.9)
+    await feed(app, *[reading] * 5)
+
+    assert app.tags.sensor_fault.value is None
+    assert app.tags.level_filled_percentage.value == 0.0
+    assert app.tags.level_reading.value == 0.0
+    assert app.tags.level_volume.value == 0.0
+    assert app.tags.raw_level_reading.value == reading
+    assert app.tags.sensor_fault_hidden.value is True
+
+
+@pytest.mark.asyncio
+async def test_steady_under_range_faults_after_three_samples(caplog):
+    app = FakeApp()
+
+    with caplog.at_level(logging.INFO):
+        await feed(app, UNDER_RANGE, UNDER_RANGE)
+        assert app.tags.sensor_fault.value is None
+        await app.handle_update(UNDER_RANGE)
+        await feed(app, *[UNDER_RANGE] * 10)
+
+    assert app.tags.sensor_fault.value == "under_range"
+    assert level_values(app) == [None] * 4
+    assert app.tags.raw_level_reading.value == UNDER_RANGE
+    assert app.tags.sensor_fault_hidden.value is False
+    assert app.tags.sensor_fault_message.value == (
+        "Sensor signal below range (3.73 mA) — check the sensor and its wiring"
+    )
+    # One warning on entering, not one a second.
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert "3.73" in warnings[0].getMessage()
+
+
+@pytest.mark.asyncio
+async def test_a_fault_after_good_readings_clears_the_stale_level():
+    """The values from before the failure must not be left looking live."""
+    app = FakeApp()
+    await app.handle_update(12.0)
+    assert level_values(app) == [50.0, 5.0, 5.0, 500.0]
+
+    await feed(app, UNDER_RANGE, UNDER_RANGE, UNDER_RANGE)
+
+    assert level_values(app) == [None] * 4
+    assert app.tags.sensor_fault.value == "under_range"
+
+
+@pytest.mark.asyncio
+async def test_a_single_spike_does_not_fault_and_holds_the_level():
+    app = FakeApp()
+    await app.handle_update(12.0)
+
+    await feed(app, 3.7, 12.0, 3.7, 3.7, 12.0, 3.7)
+
+    assert app.tags.sensor_fault.value is None
+    assert level_values(app) == [50.0, 5.0, 5.0, 500.0]
+    # The spike itself still reaches the raw tag.
+    assert app.tags.raw_level_reading.value == 3.7
+
+
+@pytest.mark.asyncio
+async def test_recovery_needs_three_good_samples(caplog):
+    app = FakeApp()
+    await feed(app, UNDER_RANGE, UNDER_RANGE, UNDER_RANGE)
+
+    with caplog.at_level(logging.INFO):
+        # A good run broken by another fault sample starts the count again.
+        await feed(app, 12.0, 12.0, UNDER_RANGE, 12.0, 12.0)
+        assert app.tags.sensor_fault.value == "under_range"
+        assert level_values(app) == [None] * 4
+        assert app.tags.raw_level_reading.value == 12.0
+
+        await app.handle_update(12.0)
+
+    assert app.tags.sensor_fault.value is None
+    assert app.tags.sensor_fault_hidden.value is True
+    assert level_values(app) == [50.0, 5.0, 5.0, 500.0]
+    recovered = [r for r in caplog.records if "back in range" in r.getMessage()]
+    assert len(recovered) == 1
+    assert recovered[0].levelno == logging.INFO
+
+
+@pytest.mark.asyncio
+async def test_clamp_band_samples_count_towards_recovery():
+    app = FakeApp()
+    await feed(app, UNDER_RANGE, UNDER_RANGE, UNDER_RANGE)
+
+    await feed(app, 3.9, 3.9, 3.9)
+
+    assert app.tags.sensor_fault.value is None
+    assert app.tags.level_filled_percentage.value == 0.0
+
+
+@pytest.mark.asyncio
+async def test_a_fault_published_before_a_restart_still_needs_good_samples():
+    app = FakeApp()
+    app.tags.sensor_fault.value = "under_range"
+
+    await feed(app, 12.0, 12.0)
+    assert app.tags.sensor_fault.value == "under_range"
+    assert app.tags.level_reading.value is None
+
+    await app.handle_update(12.0)
+    assert app.tags.sensor_fault.value is None
+    assert app.tags.level_reading.value == 5.0
+
+
+@pytest.mark.asyncio
+async def test_no_reading_publishes_nothing():
+    app = FakeApp()
+
+    assert await app.handle_update(None) is None
 
     assert app.tags.raw_level_reading.value is None
+    assert app.tags.sensor_fault.value is None
+
+
+@pytest.mark.asyncio
+async def test_fault_threshold_follows_the_configured_minimum():
+    app = FakeApp()
+    app.config.sensor_min_mA = Value(0.0)
+
+    # A 0-20 mA input can never read 0.2 below its zero, so 0 is empty.
+    await feed(app, 0.0, 0.0, 0.0)
+
+    assert app.tags.sensor_fault.value is None
+    assert app.tags.level_filled_percentage.value == 0.0
 
 
 @pytest.mark.asyncio

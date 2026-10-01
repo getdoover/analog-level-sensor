@@ -95,10 +95,29 @@ Processor-only configuration:
 | **level_filled_percentage** | number | Fill percentage (0-100+%) |
 | **level_reading** | number | Calculated level in metres (canonical -- peer apps read this) |
 | **level_reading_display** | number | Calculated level converted to the configured Depth Units, for this app's own gauge |
-| **raw_level_reading** | number | Raw analog reading in the configured input units |
+| **raw_level_reading** | number | Raw analog reading in the configured input units, published every sample (a fault included) |
 | **level_volume** | number | Calculated volume, when enabled |
+| **sensor_fault** | string | `under_range` while the input is in fault, otherwise `null`. While set, the level, percentage, display and volume tags are `null` |
 | **zero_m** / **span_m** / **fluid_density** | number | Calibration values in effect (Operator Sensor Calibration on only) |
 | **operator_calibration** | boolean | `true` while Operator Sensor Calibration is on |
+
+#### Sensor fault
+
+The input is checked against the configured minimum input (4 mA), NAMUR NE43 style:
+
+| Reading | Result |
+|---------|--------|
+| at or above the minimum | published normally |
+| up to 0.2 below it (3.8 - 4 mA) | a healthy sensor at the end of its range: read as the minimum input (empty for a Submersible; a Radar reads inverted, so full) |
+| more than 0.2 below it (under 3.8 mA) | `sensor_fault` = `under_range` |
+
+The device app enters a fault after 3 consecutive fault samples and leaves it after 3
+consecutive good ones (about 1 a second), so a noisy loop cannot flicker it; a single
+spike holds the last values. The processor variant decides on each message. While in
+fault the level, percentage, display and volume tags are `null` (so no peer or UI
+shows a stale level as live), `raw_level_reading` keeps updating, the level alarm is
+not evaluated, and the app's own page shows a warning with the reading. One warning is
+logged on entering a fault and one info line on recovery.
 
 ### Dependencies
 

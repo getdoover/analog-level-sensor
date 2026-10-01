@@ -45,20 +45,27 @@ class FakeConfig:
 
 
 class FakeTag:
-    def __init__(self):
-        self.value = None
+    def __init__(self, value=None):
+        self.value = value
+
+    def get(self):
+        return self.value
 
     async def set(self, value):
         self.value = value
 
 
 class FakeTags:
-    def __init__(self):
+    def __init__(self, sensor_fault=None):
         self.level_filled_percentage = FakeTag()
         self.level_reading = FakeTag()
         self.level_reading_display = FakeTag()
         self.raw_level_reading = FakeTag()
         self.level_volume = FakeTag()
+        # tag_values as the invocation found them
+        self.sensor_fault = FakeTag(sensor_fault)
+        self.sensor_fault_hidden = FakeTag(True)
+        self.sensor_fault_message = FakeTag()
 
 
 def make_event(channel: str, data: dict):
@@ -68,10 +75,10 @@ def make_event(channel: str, data: dict):
     )
 
 
-def make_app():
+def make_app(sensor_fault=None):
     app = object.__new__(AnalogLevelSensorProcessorApplication)
     app.config = FakeConfig()
-    app.tags = FakeTags()
+    app.tags = FakeTags(sensor_fault)
     return app
 
 
@@ -105,3 +112,49 @@ async def test_message_input_ignores_other_channels():
     await app.on_message_create(make_event("other", {"analog_input_v": "12.0"}))
 
     assert app.tags.raw_level_reading.value is None
+
+
+def reading_event(value):
+    return make_event("on_dm_event", {"analog_input_v": value})
+
+
+@pytest.mark.asyncio
+async def test_under_range_message_faults_without_a_debounce():
+    """Each invocation is a fresh instance, so the processor cannot count
+    samples: one under-range reading is a fault."""
+    app = make_app()
+    await app.setup()
+
+    await app.on_message_create(reading_event(3.73))
+
+    assert app.tags.sensor_fault.value == "under_range"
+    assert app.tags.raw_level_reading.value == 3.73
+    assert app.tags.level_filled_percentage.value is None
+    assert app.tags.level_reading.value is None
+
+
+@pytest.mark.asyncio
+async def test_in_range_message_clears_a_fault_from_an_earlier_invocation(caplog):
+    app = make_app(sensor_fault="under_range")
+    await app.setup()
+
+    with caplog.at_level("INFO"):
+        await app.on_message_create(reading_event(12.0))
+
+    assert app.tags.sensor_fault.value is None
+    assert app.tags.level_filled_percentage.value == 50.0
+    assert "back in range" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_a_fault_carried_from_an_earlier_invocation_is_not_logged_again(
+    caplog,
+):
+    app = make_app(sensor_fault="under_range")
+    await app.setup()
+
+    with caplog.at_level("WARNING"):
+        await app.on_message_create(reading_event(3.5))
+
+    assert app.tags.sensor_fault.value == "under_range"
+    assert "below range" not in caplog.text

@@ -2,10 +2,20 @@ import itertools
 import logging
 
 from .common_config import SensorType
+from .common_tags import SENSOR_FAULT_DEFAULT_MESSAGE, SENSOR_FAULT_UNDER_RANGE
 
 log = logging.getLogger(__name__)
 
 WATER_DENSITY = 1000.0  # kg/m³
+
+# NAMUR NE43-style loop-current check, relative to the configured minimum input
+# (4 mA): a reading down to this far below it is a healthy sensor at the end
+# of its range (an empty tank; full for a Radar, which reads inverted) and
+# reads as the minimum; anything lower is a sensor or wiring fault.
+UNDER_RANGE_MARGIN = 0.2
+# Consecutive samples (about one a second on the device) needed to enter, and
+# to leave, a sensor fault, so a noisy loop cannot flicker it.
+FAULT_DEBOUNCE_SAMPLES = 3
 
 
 def config_fluid_density(config) -> float:
@@ -20,15 +30,43 @@ def config_fluid_density(config) -> float:
 
 
 class CommonAnalogLevelSensorApplication:
-    async def handle_update(self, result):
+    # Samples to enter / leave a sensor fault. The processor overrides it: each
+    # of its invocations is a fresh instance, so a count would never build up.
+    fault_debounce_samples = FAULT_DEBOUNCE_SAMPLES
+
+    async def handle_update(self, result) -> float | None:
+        """Publish one raw input sample.
+
+        Returns the reading the level, percentage and volume were derived from
+        (the sample, raised to the minimum input in the clamp band), or None when
+        the sample published no level: no reading, a sensor fault, or an
+        under-range sample that has not yet become a fault.
+        """
         log.info(f"Level sensor reading: {result}")
 
-        if result is None or result < self.config.sensor_min_mA.value:
-            return
+        if result is None:
+            return None
 
-        level = self._level_reading(result)
+        # Always, a fault included: it is the one number that says what the
+        # sensor is doing (the HMI Sensor tab and the fault warning show it).
+        await self.tags.raw_level_reading.set(result)
 
-        await self.tags.level_filled_percentage.set(self._filled_percentage(result))
+        minimum = self.config.sensor_min_mA.value
+        under_range = result < minimum - UNDER_RANGE_MARGIN
+        if self._update_fault(result, under_range):
+            await self._publish_fault()
+            return None
+        if under_range:
+            # Not a fault yet (a spike, or the start of one): hold the values
+            # already published rather than derive any from it.
+            return None
+
+        # Within UNDER_RANGE_MARGIN below the minimum is a healthy sensor at the
+        # end of its range, so it reads as the minimum input.
+        reading = max(result, minimum)
+        level = self._level_reading(reading)
+
+        await self.tags.level_filled_percentage.set(self._filled_percentage(reading))
         # level_reading is canonical metres: peer apps (sia-local-control,
         # cylindrical-tank) consume it and do their own scaling. The UI gauge
         # can't scale a $tag reference in the browser, so the configured-unit
@@ -37,11 +75,80 @@ class CommonAnalogLevelSensorApplication:
         await self.tags.level_reading_display.set(
             self.config.metres_to_depth_units(level)
         )
-        await self.tags.raw_level_reading.set(result)
         # Always publish volume so peer apps (e.g. the HMI) can show it
         # regardless of how this sensor's own UI is configured. hide_volume /
         # Reading Type only affect this app's own gauge, not the data on the wire.
-        await self.tags.level_volume.set(self._volume(result))
+        await self.tags.level_volume.set(self._volume(reading))
+        await self.tags.sensor_fault.set(None)
+        await self.tags.sensor_fault_hidden.set(True)
+        return reading
+
+    # -- sensor fault (sensor_fault tag) ---------------------------------------
+
+    def _in_sensor_fault(self) -> bool:
+        in_fault = getattr(self, "_sensor_fault_active", None)
+        if in_fault is None:
+            # First sample: a fault published before a restart (or by the
+            # previous processor invocation) still stands, so it still takes
+            # good samples to clear it.
+            in_fault = self.tags.sensor_fault.get() is not None
+            self._sensor_fault_active = in_fault
+            self._sensor_fault_streak = 0
+            self._sensor_fault_input = None
+        return in_fault
+
+    def _update_fault(self, result, under_range: bool) -> bool:
+        """Debounce the under-range check. True while the input is in fault."""
+        in_fault = self._in_sensor_fault()
+        if under_range:
+            self._sensor_fault_input = result
+        if under_range == in_fault:
+            self._sensor_fault_streak = 0
+            return in_fault
+
+        self._sensor_fault_streak += 1
+        if self._sensor_fault_streak < self.fault_debounce_samples:
+            return in_fault
+
+        self._sensor_fault_streak = 0
+        self._sensor_fault_active = under_range
+        units = self._input_units()
+        if under_range:
+            log.warning(
+                "Sensor input %s %s is below range (minimum %s %s): level, "
+                "percentage and volume cleared until it recovers",
+                result,
+                units,
+                self.config.sensor_min_mA.value,
+                units,
+            )
+        else:
+            log.info("Sensor input back in range at %s %s", result, units)
+        return under_range
+
+    async def _publish_fault(self):
+        # Clear the derived values rather than leave the last good ones looking
+        # live to peers and UIs.
+        await self.tags.level_filled_percentage.set(None)
+        await self.tags.level_reading.set(None)
+        await self.tags.level_reading_display.set(None)
+        await self.tags.level_volume.set(None)
+        await self.tags.sensor_fault.set(SENSOR_FAULT_UNDER_RANGE)
+        await self.tags.sensor_fault_message.set(self._fault_message())
+        await self.tags.sensor_fault_hidden.set(False)
+
+    def _input_units(self) -> str:
+        units = getattr(self.config, "input_units", None)
+        return (units.value if units is not None else None) or "mA"
+
+    def _fault_message(self) -> str:
+        value = getattr(self, "_sensor_fault_input", None)
+        if value is None:
+            return SENSOR_FAULT_DEFAULT_MESSAGE
+        return (
+            f"Sensor signal below range ({value:.2f} {self._input_units()}) "
+            "— check the sensor and its wiring"
+        )
 
     def _map_value(self, value, low_a, high_a, low_b, high_b, invert=False):
         if invert and self.config.type.value == SensorType.RADAR:

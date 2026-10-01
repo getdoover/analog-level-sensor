@@ -53,24 +53,15 @@ class AnalogLevelSensorDeviceApplication(
         await self.handle_update(result)
 
     async def handle_update(self, result):
-        await super().handle_update(result)
+        reading = await super().handle_update(result)
 
-        # The shared handler drops under-range samples before writing any tag,
-        # so keep the alarm blind to them too rather than alarming on a reading
-        # the rest of the app has decided not to trust.
-        if result is None:
-            return
-        if result < self.config.sensor_min_mA.value:
-            if self._calibration_active():
-                # The HMI Sensor tab shows the live loop current from this tag,
-                # and a sensor at or just below its zero (empty tank, broken
-                # loop) is exactly when an operator sets the zero, so the tag
-                # must not freeze at the last in-range reading. The level,
-                # percentage, volume and alarm still skip the sample.
-                await self.tags.raw_level_reading.set(result)
+        # No level was published from this sample (a sensor fault, or an
+        # under-range sample not yet a fault): keep the alarm blind to it too
+        # rather than alarm on a reading the rest of the app does not trust.
+        if reading is None:
             return
 
-        await self._check_alarm(result)
+        await self._check_alarm(reading)
 
     # -- Operator Sensor Calibration (calibration.py) ---------------------------
     # The 4-20 mA conversion (common_app._level_reading) runs on these, so the

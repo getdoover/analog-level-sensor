@@ -10,6 +10,16 @@ _LOW_BAND = 0.15
 
 
 class CommonAnalogLevelSensorUI(ui.UI):
+    # Shown while sensor_fault is set. The schema is published once, so the
+    # visibility and the text (which carries the reading) are bound to tags.
+    sensor_fault_warning = ui.WarningIndicator(
+        CommonAnalogLevelSensorTags.sensor_fault_message,
+        name="sensor_fault_warning",
+        hidden=CommonAnalogLevelSensorTags.sensor_fault_hidden,
+        can_cancel=False,
+        position=1,
+    )
+
     percentage = ui.NumericVariable(
         "Level",
         units="%",
