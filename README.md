@@ -62,13 +62,17 @@ reading (level, percentage, volume, alarm):
 
 | Value / RPC / tag | Meaning | Range | Default |
 |-------------------|---------|-------|---------|
-| `zero_m` | Minimum level (m): at the minimum input (4 mA); at 20 mA for a Radar | 0 <= zero < span | Sensor Min Metres |
-| `span_m` | Maximum level (m): at the maximum input (20 mA); at 4 mA for a Radar | zero < span <= 100 | Sensor Maximum Metres |
+| `zero_m` | Minimum level (m): at the minimum input (4 mA); at 20 mA for a Radar | -100 <= zero < span | Sensor Min Metres |
+| `span_m` | Maximum level (m): at the maximum input (20 mA); at 4 mA for a Radar | 0 < span <= 100, above zero | Sensor Maximum Metres |
 | `fluid_density` | kg/m³, scales submersible readings | 500 - 2500 | Fluid Density (1000) |
 
 Always metres, whatever Depth Units is. A Radar reads inverted (4 mA is the maximum
 level), so the section labels its zero as the level at 20 mA and its span as the level
-at 4 mA. **Reset to configured values** (RPC
+at 4 mA. The zero may be negative, for a sensor whose minimum-level end sits below the
+tank datum (e.g. a submersible transmitter whose 4 mA point is 0.15 m below the tank
+floor: zero -0.15 m); the span stays above 0 m. Near that end the level then reads
+below 0 m, and the filled percentage and volume follow it linearly, unclamped (slightly
+negative), as they do for any level below the Empty Level. **Reset to configured values** (RPC
 `reset_calibration`) returns all three to the config. An out-of-range or non-numeric
 value is refused with `INVALID`; with the setting off every RPC is refused with
 `UNAVAILABLE`, the section is hidden and the tags below are not published. No

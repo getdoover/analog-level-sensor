@@ -117,7 +117,7 @@ class CommonAnalogLevelSensorConfig(config.Schema):
     )
     sensor_min_m = config.Number(
         "Sensor Minimum Metres",
-        description="Minimum sensor depth (m). For submersible sensors, the sensor's mounting height above the tank floor",
+        description="Minimum sensor depth (m). For submersible sensors, the sensor's mounting height above the tank floor (negative if below it)",
         default=0.0,
         position=6,
     )

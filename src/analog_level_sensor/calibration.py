@@ -3,11 +3,11 @@
 Operators tune the 4-20 mA conversion on site, from this app's cloud UI and the
 local HMI, without a redeploy:
 
-| Value / RPC / tag | Meaning                     | Range           | Default without an operator value |
-|-------------------|-----------------------------|-----------------|-----------------------------------|
-| ``zero_m``        | minimum level (m)           | 0 <= z < span   | config ``sensor_minimum_metres``  |
-| ``span_m``        | maximum level (m)           | zero < s <= 100 | config ``sensor_maximum_metres``  |
-| ``fluid_density`` | kg/m³ (submersible scaling) | 500..2500       | config ``fluid_density`` (1000)   |
+| Value / RPC / tag | Meaning                     | Range                  | Default without an operator value |
+|-------------------|-----------------------------|------------------------|-----------------------------------|
+| ``zero_m``        | minimum level (m)           | -100 <= z < span       | config ``sensor_minimum_metres``  |
+| ``span_m``        | maximum level (m)           | 0 < s <= 100, s > zero | config ``sensor_maximum_metres``  |
+| ``fluid_density`` | kg/m³ (submersible scaling) | 500..2500              | config ``fluid_density`` (1000)   |
 
 Always metres, whatever ``depth_units`` is. The input endpoints (4 / 20 mA) and
 the volume curve stay config-only. The zero and span map the input range onto
@@ -16,6 +16,17 @@ Inverted the zero is the level at the minimum input (4 mA) and the span the
 level at the maximum input (20 mA); a Radar reads inverted, so its zero is the
 level at 20 mA and its span the level at 4 mA. The density only scales a
 submersible reading.
+
+The zero may be negative: the minimum level is below the tank datum when the
+sensor's minimum-level end sits below it (a submersible / hydrostatic
+transmitter mounted below or offset from the tank floor, or whose 4 mA point is
+below it; a Radar whose 20 mA end reaches below the floor). The level then
+reads below 0 m near that end, and the percentage and volume follow it
+unclamped, as they already do for any level below the configured empty level.
+The span (the maximum level) stays above 0 m: a range wholly below the datum
+is not a tank level. So in both orientations it is the minimum-level end that
+may be negative: the 4 mA end for a Submersible or Radar Inverted, the 20 mA
+end for a Radar.
 
 Everything is gated on the ``operator_calibration_enabled`` config field
 ("Operator Sensor Calibration", default off). Off: the "Sensor Calibration"
@@ -162,7 +173,8 @@ ZERO = CalibrationValue(
     name="zero_m",
     label="zero",
     units="m",
-    minimum=0.0,
+    # Negative: the minimum level may sit below the tank datum (module docstring).
+    minimum=-100.0,
     maximum=100.0,
     min_inclusive=True,
     max_inclusive=False,

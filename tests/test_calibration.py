@@ -14,7 +14,7 @@ from pydoover.config import NotSet
 from pydoover.rpc import RPCError
 
 from analog_level_sensor import calibration
-from analog_level_sensor.alarm import Alarm
+from analog_level_sensor.alarm import Alarm, AlarmType, Direction, evaluate
 from analog_level_sensor.app_config import AnalogLevelSensorDeviceConfig
 from analog_level_sensor.app_tags import AnalogLevelSensorDeviceTags
 from analog_level_sensor.app_ui import AnalogLevelSensorDeviceUI
@@ -381,13 +381,14 @@ def test_change_applies_on_the_next_reading_without_restart():
 @pytest.mark.parametrize(
     "method,value",
     [
-        ("zero_m", -0.1),
+        ("zero_m", -100.01),
+        ("zero_m", -100.00004),  # rounds to -100 but is below it
         ("zero_m", 10.0),  # not below the 10 m span
         ("zero_m", 100.0),
         ("span_m", 0.0),
+        ("span_m", -0.5),  # the maximum level stays above the datum
         ("span_m", 100.01),
         ("span_m", 100.00004),  # rounds to 100 but is above it
-        ("zero_m", -0.00004),  # rounds to -0.0 but is below 0
         ("span_m", 0.00004),  # above 0 but would be stored as 0
         ("fluid_density", 499.9),
         ("fluid_density", 2500.1),
@@ -429,6 +430,119 @@ def test_boundaries_and_rounding():
     assert isinstance(value, float) and value == 7.25
     zero = run(app.calibration.request("zero_m", -0.0))
     assert zero == 0.0 and math.copysign(1, zero) == 1  # stored as 0, not -0
+    zero = run(app.calibration.request("zero_m", -0.00004))
+    assert zero == 0.0 and math.copysign(1, zero) == 1  # rounds to 0, not -0
+    assert run(app.calibration.request("zero_m", -100)) == -100.0
+    assert run(app.calibration.request("zero_m", "-0.15")) == -0.15
+
+
+# -- a negative zero (the minimum level below the tank datum) ------------------------
+
+
+def test_negative_zero_reads_below_the_datum_and_derived_values_follow():
+    """A transmitter whose 4 mA point is 0.15 m below the tank floor."""
+    app = run(started(make_config(enabled=True)))
+    assert run(app.calibration.request("zero_m", -0.15)) == -0.15
+    assert run(app.calibration.request("span_m", 2.0)) == 2.0
+
+    # 4 mA is the zero: -0.15 m. Empty 0 / full 10 m, max volume 1000 L: the
+    # percentage and volume follow the level linearly, unclamped (as for any
+    # level below the empty level), so they read just below 0 there.
+    assert app._level_reading(4.0) == pytest.approx(-0.15)
+    assert app._filled_percentage(4.0) == pytest.approx(-1.5)
+    assert app._volume(4.0) == pytest.approx(-15.0)
+    # 0 m is crossed at 4 + 16 * 0.15 / 2.15 mA; 12 mA = -0.15 + 2.15 / 2.
+    assert app._level_reading(4 + 16 * 0.15 / 2.15) == pytest.approx(0.0)
+    assert app._level_reading(12.0) == pytest.approx(0.925)
+    assert app._filled_percentage(12.0) == pytest.approx(9.25)
+    assert app._level_reading(20.0) == pytest.approx(2.0)
+
+    run(app.handle_update(4.0))
+    assert app.tags.store["level_reading"] == pytest.approx(-0.15)
+    assert app.tags.store["level_reading_display"] == pytest.approx(-0.15)
+    assert app.tags.store["level_filled_percentage"] == pytest.approx(-1.5)
+    assert app.tags.store["level_volume"] == pytest.approx(-15.0)
+    assert app.tags.store["zero_m"] == -0.15
+    assert app.tags.store["span_m"] == 2.0
+
+
+def test_negative_zero_with_a_volume_curve_extrapolates_the_first_segment():
+    curve = [{"level": 0.0, "volume": 0.0}, {"level": 2.0, "volume": 400.0}]
+    app = run(started(make_config(enabled=True, volume_curve=curve)))
+    run(app.calibration.request("zero_m", -0.15))
+    run(app.calibration.request("span_m", 2.0))
+    assert app._volume(4.0) == pytest.approx(-30.0)
+    assert app._filled_percentage(4.0) == pytest.approx(-7.5)
+
+
+def test_negative_zero_density_scales_only_the_column_above_it():
+    app = run(started(make_config(enabled=True)))
+    run(app.calibration.request("zero_m", -0.5))
+    run(app.calibration.request("span_m", 9.5))
+    run(app.calibration.request("fluid_density", 1250))
+    # 4 mA is the zero whatever the fluid; 12 mA: -0.5 + 5 m of water / 1.25.
+    assert app._level_reading(4.0) == pytest.approx(-0.5)
+    assert app._level_reading(12.0) == pytest.approx(3.5)
+
+
+def test_negative_zero_on_a_radar_is_the_level_at_20_ma():
+    """A Radar reads inverted: its zero (the minimum level) is at 20 mA and
+    its span, the level at 4 mA, stays above 0."""
+    app = run(started(make_config(enabled=True, sensor_type="Radar")))
+    run(app.calibration.request("zero_m", -0.2))
+    run(app.calibration.request("span_m", 3.0))
+    assert app._level_reading(20.0) == pytest.approx(-0.2)
+    assert app._level_reading(4.0) == pytest.approx(3.0)
+    with pytest.raises(RPCError) as err:
+        run(app.calibration.request("span_m", -0.1))
+    assert err.value.code == "INVALID"
+
+
+def test_negative_zero_level_alarm():
+    """A level alarm compares the negative level as it is (a Less Than
+    alarm below the empty tank fires); a percentage alarm sees -1.5 %."""
+    app = run(started(make_config(enabled=True, reading_type="Level Reading")))
+    run(app.calibration.request("zero_m", -0.15))
+    reading = app._alarm_value(4.0)
+    assert reading == pytest.approx(-0.15)
+    breach = evaluate(reading, AlarmType.less_than, point=0.1)
+    assert breach == (Direction.dropped_below, 0.1)
+    assert app._format_value(reading) == "-0.15"
+    app = run(started(make_config(enabled=True, reading_type="Filled Percentage")))
+    run(app.calibration.request("zero_m", -0.15))
+    run(app.calibration.request("span_m", 2.0))
+    assert app._alarm_value(4.0) == pytest.approx(-1.5)
+
+
+def test_span_must_stay_above_a_negative_zero():
+    app = run(started(make_config(enabled=True)))
+    run(app.calibration.request("zero_m", -0.5))
+    with pytest.raises(RPCError) as err:
+        run(app.calibration.request("span_m", 0.0))
+    assert err.value.code == "INVALID"
+    assert run(app.calibration.request("span_m", 0.0001)) == 0.0001
+    with pytest.raises(RPCError) as err:
+        run(app.calibration.request("zero_m", 0.0001))
+    assert "below the span" in err.value.message
+
+
+def test_cloud_zero_input_allows_a_negative_value():
+    sub = build_ui(make_config(enabled=True)).sensor_calibration
+    assert sub.zero_m.to_dict()["min"] == -100.0
+    assert sub.span_m.to_dict()["min"] == 0.0
+    assert calibration.ZERO.describe_range() == "-100 to below 100 m"
+
+
+def test_negative_config_zero_is_the_default_and_restored():
+    config = make_config(enabled=True, sensor_minimum_metres=-0.15)
+    app = run(started(config))
+    assert app.calibration.effective().zero_m == -0.15
+    assert app.tags.store["zero_m"] == -0.15
+    assert build_ui(config).sensor_calibration.zero_m.default == -0.15
+
+    persisted = {"zero_m": -0.3, "span_m": 4.5, "fluid_density": 1000.0}
+    app = run(started(make_config(enabled=True), synced=False, persisted=persisted))
+    assert app.calibration.effective() == (-0.3, 4.5, 1000.0)
 
 
 class FailingWrites(Harness):
@@ -599,7 +713,7 @@ def test_offline_restore_dropped_when_ui_cmds_has_no_values():
 
 
 def test_offline_restore_ignores_invalid_tags():
-    persisted = {"zero_m": -5, "span_m": "x", "fluid_density": 9000}
+    persisted = {"zero_m": -150, "span_m": "x", "fluid_density": 9000}
     app = run(started(make_config(enabled=True), synced=False, persisted=persisted))
     assert app.calibration.effective() == (0.0, 10.0, 1000.0)
 

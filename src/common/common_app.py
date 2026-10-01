@@ -66,7 +66,8 @@ class CommonAnalogLevelSensorApplication:
         level = self._map_value(perc, 0, 100, zero, self._span_m())
         if self.config.type.value == SensorType.SUBMERSIBLE:
             # Scale only the fluid column; the zero is the sensor's mounting
-            # height above the tank floor and does not depend on the fluid.
+            # height above the tank floor (negative below it) and does not
+            # depend on the fluid.
             level = zero + (level - zero) * WATER_DENSITY / self._fluid_density()
         return level
 
@@ -75,7 +76,8 @@ class CommonAnalogLevelSensorApplication:
     # enabled; otherwise (and in the processor) they are the deployment config.
     def _zero_m(self) -> float:
         """The minimum level (m): at the minimum input (4 mA), or at the
-        maximum input (20 mA) for a Radar, which reads inverted."""
+        maximum input (20 mA) for a Radar, which reads inverted. May be
+        negative (below the tank datum); the level then reads below 0 m."""
         return self.config.sensor_min_m.value
 
     def _span_m(self) -> float:
