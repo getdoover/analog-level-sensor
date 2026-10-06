@@ -736,7 +736,7 @@ def test_write_before_a_late_sync_wins_and_is_stored_again():
 
 # -- live loop current for the HMI Sensor tab, and the sensor fault ----------------------
 
-UNDER_RANGE = 3.73  # the live skid: a 4-20 mA sensor below its 3.8 mA fault limit
+UNDER_RANGE = 0.5  # a dead loop: below the 1 mA fault limit of a 4-20 mA input
 
 
 def run_samples(app, *readings):

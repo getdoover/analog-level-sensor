@@ -33,7 +33,7 @@ Analog Input → Sensor % → Level (m) → Fill %
 ```
 
 1. **Raw reading** -- the Docker app reads `platform_iface.fetch_ai(pin)`; the processor app reads a configured message path such as `$on_dm_event.analog_input_v`
-2. **Range validation** -- below `sensor_min_mA - 0.2` is a sensor fault (`sensor_fault`, debounced over 3 samples on the device; level tags cleared); within 0.2 below `sensor_min_mA` reads as the minimum
+2. **Range validation** -- more than 3/16 of the input span (3 mA on 4-20 mA, so under 1 mA) below `sensor_min_mA` is a sensor fault (`sensor_fault`, debounced over 3 samples on the device; level tags cleared); within that margin it reads as the minimum
 3. **Sensor percentage** -- maps the configured input range to 0-100% (inverted for radar sensors)
 4. **Level reading** -- maps percentage to metres using sensor min/max
 5. **Fill percentage** -- either linear mapping (empty→full) or volume curve interpolation

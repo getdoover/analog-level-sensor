@@ -8,11 +8,13 @@ log = logging.getLogger(__name__)
 
 WATER_DENSITY = 1000.0  # kg/m³
 
-# NAMUR NE43-style loop-current check, relative to the configured minimum input
-# (4 mA): a reading down to this far below it is a healthy sensor at the end
-# of its range (an empty tank; full for a Radar, which reads inverted) and
-# reads as the minimum; anything lower is a sensor or wiring fault.
-UNDER_RANGE_MARGIN = 0.2
+# Loop-current check, relative to the configured minimum input (4 mA). Below
+# the minimum is a healthy sensor at the end of its range (an empty tank; full
+# for a Radar, which reads inverted) and reads as the minimum, as a submersible
+# at its zero often sits a little under 4 mA. Only a dead loop is a fault: a
+# reading this fraction of the input span below the minimum, i.e. under 1 mA on
+# 4-20 mA, or under 1000 on a 4000-20000 µA raw input.
+UNDER_RANGE_MARGIN = 3 / 16
 # Consecutive samples (about one a second on the device) needed to enter, and
 # to leave, a sensor fault, so a noisy loop cannot flicker it.
 FAULT_DEBOUNCE_SAMPLES = 3
@@ -52,7 +54,7 @@ class CommonAnalogLevelSensorApplication:
         await self.tags.raw_level_reading.set(result)
 
         minimum = self.config.sensor_min_mA.value
-        under_range = result < minimum - UNDER_RANGE_MARGIN
+        under_range = result < minimum - self._under_range_margin()
         if self._update_fault(result, under_range):
             await self._publish_fault()
             return None
@@ -61,7 +63,7 @@ class CommonAnalogLevelSensorApplication:
             # already published rather than derive any from it.
             return None
 
-        # Within UNDER_RANGE_MARGIN below the minimum is a healthy sensor at the
+        # Within the under-range margin below the minimum is a healthy sensor at the
         # end of its range, so it reads as the minimum input.
         reading = max(result, minimum)
         level = self._level_reading(reading)
@@ -136,6 +138,12 @@ class CommonAnalogLevelSensorApplication:
         await self.tags.sensor_fault.set(SENSOR_FAULT_UNDER_RANGE)
         await self.tags.sensor_fault_message.set(self._fault_message())
         await self.tags.sensor_fault_hidden.set(False)
+
+    def _under_range_margin(self) -> float:
+        """How far below the minimum input a reading still counts as the
+        minimum (beyond it the loop is dead), in the configured input units."""
+        span = self.config.sensor_max_mA.value - self.config.sensor_min_mA.value
+        return abs(span) * UNDER_RANGE_MARGIN
 
     def _input_units(self) -> str:
         units = getattr(self.config, "input_units", None)

@@ -103,13 +103,13 @@ Processor-only configuration:
 
 #### Sensor fault
 
-The input is checked against the configured minimum input (4 mA), NAMUR NE43 style:
+The input is checked against the configured minimum input (4 mA):
 
 | Reading | Result |
 |---------|--------|
 | at or above the minimum | published normally |
-| up to 0.2 below it (3.8 - 4 mA) | a healthy sensor at the end of its range: read as the minimum input (empty for a Submersible; a Radar reads inverted, so full) |
-| more than 0.2 below it (under 3.8 mA) | `sensor_fault` = `under_range` |
+| below it, down to 3/16 of the input span (1 - 4 mA; 1000 - 4000 on a 4000 - 20000 µA raw input) | a healthy sensor at the end of its range: read as the minimum input (empty for a Submersible; a Radar reads inverted, so full) |
+| further below, a dead loop (under 1 mA) | `sensor_fault` = `under_range` |
 
 The device app enters a fault after 3 consecutive fault samples and leaves it after 3
 consecutive good ones (about 1 a second), so a noisy loop cannot flicker it; a single

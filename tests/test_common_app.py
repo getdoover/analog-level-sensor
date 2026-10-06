@@ -87,7 +87,7 @@ async def test_handle_update_writes_level_tags():
 
 # -- under range: the clamp band and the sensor fault --------------------------------
 
-UNDER_RANGE = 3.73  # the live skid: below the 3.8 mA fault limit of a 4 mA zero
+UNDER_RANGE = 0.5  # a dead loop: below the 1 mA fault limit of a 4-20 mA input
 LEVEL_TAGS = (
     "level_filled_percentage",
     "level_reading",
@@ -141,12 +141,12 @@ async def test_steady_under_range_faults_after_three_samples(caplog):
     assert app.tags.raw_level_reading.value == UNDER_RANGE
     assert app.tags.sensor_fault_hidden.value is False
     assert app.tags.sensor_fault_message.value == (
-        "Sensor signal below range (3.73 mA) — check the sensor and its wiring"
+        "Sensor signal below range (0.50 mA) — check the sensor and its wiring"
     )
     # One warning on entering, not one a second.
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert len(warnings) == 1
-    assert "3.73" in warnings[0].getMessage()
+    assert "0.5" in warnings[0].getMessage()
 
 
 @pytest.mark.asyncio
@@ -167,12 +167,12 @@ async def test_a_single_spike_does_not_fault_and_holds_the_level():
     app = FakeApp()
     await app.handle_update(12.0)
 
-    await feed(app, 3.7, 12.0, 3.7, 3.7, 12.0, 3.7)
+    await feed(app, 0.5, 12.0, 0.5, 0.5, 12.0, 0.5)
 
     assert app.tags.sensor_fault.value is None
     assert level_values(app) == [50.0, 5.0, 5.0, 500.0]
     # The spike itself still reaches the raw tag.
-    assert app.tags.raw_level_reading.value == 3.7
+    assert app.tags.raw_level_reading.value == 0.5
 
 
 @pytest.mark.asyncio

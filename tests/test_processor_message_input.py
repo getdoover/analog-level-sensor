@@ -125,10 +125,10 @@ async def test_under_range_message_faults_without_a_debounce():
     app = make_app()
     await app.setup()
 
-    await app.on_message_create(reading_event(3.73))
+    await app.on_message_create(reading_event(0.5))
 
     assert app.tags.sensor_fault.value == "under_range"
-    assert app.tags.raw_level_reading.value == 3.73
+    assert app.tags.raw_level_reading.value == 0.5
     assert app.tags.level_filled_percentage.value is None
     assert app.tags.level_reading.value is None
 
@@ -154,7 +154,50 @@ async def test_a_fault_carried_from_an_earlier_invocation_is_not_logged_again(
     await app.setup()
 
     with caplog.at_level("WARNING"):
-        await app.on_message_create(reading_event(3.5))
+        await app.on_message_create(reading_event(0.5))
 
     assert app.tags.sensor_fault.value == "under_range"
     assert "below range" not in caplog.text
+
+
+def make_raw_microamp_app():
+    """A Digital Matter Hawk: the 4-20 mA input arrives in µA as analogue_raw.5,
+    with the range configured as 4000-20000 (Baamba Dam 1)."""
+    app = make_app()
+    app.config.input_message_path = Value("$on_dm_event.analogue_raw.5")
+    app.config.sensor_min_mA = Value(4000)
+    app.config.sensor_max_mA = Value(20000)
+    return app
+
+
+def raw_event(value):
+    return make_event("on_dm_event", {"analogue_raw": {"5": value}})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reading", [3890, 3500, 1000])
+async def test_raw_microamp_zero_reads_as_empty(reading):
+    """A submersible at its zero reading 3.89 mA as 3890 µA is an empty tank:
+    the margin below the minimum scales with the units, so it is 200 µA here,
+    not 0.2."""
+    app = make_raw_microamp_app()
+    await app.setup()
+
+    await app.on_message_create(raw_event(reading))
+
+    assert app.tags.sensor_fault.value is None
+    assert app.tags.raw_level_reading.value == reading
+    assert app.tags.level_filled_percentage.value == 0.0
+    assert app.tags.level_reading.value == 0.0
+
+
+@pytest.mark.asyncio
+async def test_raw_microamp_below_the_margin_faults():
+    app = make_raw_microamp_app()
+    await app.setup()
+
+    await app.on_message_create(raw_event(500))
+
+    assert app.tags.sensor_fault.value == "under_range"
+    assert app.tags.raw_level_reading.value == 500
+    assert app.tags.level_filled_percentage.value is None
