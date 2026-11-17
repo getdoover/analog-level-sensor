@@ -1,90 +1,76 @@
 # Analog level sensor — Rust port
 
-A Rust rewrite of this app, built on **[doover-rs](https://github.com/getdoover/doover-rs)**
-(the Rust equivalent of `pydoover`). It is a faithful port of the Python app in
-`../src/analog_level_sensor` — same config schema, same tags, same UI, same
-mA→level/percentage/volume maths (volume curve and Radar inversion included),
-same "below 4 mA = disconnected, skip" rule — but ships as a ~2 MB static
-binary.
+A Rust rewrite of the device app, built on
+**[doover-rs](https://github.com/getdoover/doover-rs)** (the Rust equivalent of
+`pydoover`). It is meant as a drop-in replacement for the Python app in
+`../src/analog_level_sensor` (+ `../src/common`): the same config schema, UI
+schema and notification schema (the export is checked byte for byte against
+the Python app's), the same tags, and the same behaviour:
 
-## Why
+- mA → level / filled percentage / volume, with the volume curve, Radar
+  inversion, fluid density scaling of a submersible's column, and a negative
+  zero (minimum level below the tank datum);
+- `level_reading` stays in metres; `level_reading_display` carries the
+  configured Depth Units for this app's own gauge;
+- sub-4 mA handling: anything within 3/16 of the input span below the minimum
+  (1–4 mA on 4–20 mA) reads as the minimum; only a dead loop (< 1 mA) raises
+  `sensor_fault` after 3 samples, clears the derived tags, shows the warning,
+  and takes 3 good samples to clear ("Sensor input back in range");
+- the alarm (`../ALARM_SYSTEM.md`): Greater Than / Less Than / Allowed Range on
+  the Reading Type (or the deprecated Alarm Source for a legacy null), grace
+  period, re-notify interval, per-depth-unit slider keys, sent as the declared
+  `level_alarm` notification;
+- Operator Sensor Calibration: zero / span / fluid density set from the UI or
+  the HMI over `ui_cmds` RPCs (`INVALID` / `UNAVAILABLE` errors as in Python),
+  stored in `ui_cmds`, readback tags, reset to configured values, and the
+  offline-boot restore from the readback tags.
 
-- **Footprint**: a `scratch`-based image of a few MB and a small RSS, vs the
-  Python app's interpreter + deps. Matters on RAM-constrained CM4-class
-  devices.
-- **Type safety**: the deployment config, tags and UI are all declared as typed
-  Rust structs via `doover-rs`'s derive macros, and the config schema is
-  exported straight from them.
+The processor variant (`../src/analog_level_sensor_processor`, a cloud lambda)
+is not ported.
 
 ## Layout
 
-Unlike the Python app (many small modules), the Rust port keeps everything in
-one file that maps 1:1 onto the Python structure:
+| Python                                       | Rust                 |
+|----------------------------------------------|----------------------|
+| `common/common_config.py`, `app_config.py`   | `src/config.rs`      |
+| `common/common_tags.py`, `app_tags.py`       | `src/tags.rs`        |
+| `common/common_ui.py`, `app_ui.py`           | `src/ui.rs`          |
+| `common/common_app.py`                       | `src/conversion.rs`  |
+| `alarm.py`                                   | `src/alarm.rs`       |
+| `application.py` (alarm wiring)              | `src/device.rs`      |
+| `calibration.py`                             | `src/calibration.rs` |
+| `app_notifications.py`, `application.py`     | `src/main.rs`        |
 
-- `src/main.rs`
-  - `AnalogLevelSensorConfig` (`#[derive(Config)]`) — the typed deployment
-    config, including `VolumeCurvePoint` / `SensorType` and `ApplicationPosition`
-    (mirrors `app_config.py`).
-  - `AnalogLevelSensorTags` (`#[derive(Tags)]`) — `level_filled_percentage`,
-    `level_reading`, `raw_level_reading`, `level_volume` (mirrors `app_tags.py`).
-  - `AnalogLevelSensorUi` (`#[derive(Ui)]` + `UiBuild`) — the radial gauge and
-    readings, including the runtime volume-promotion in `setup` (mirrors
-    `app_ui.py`).
-  - `AnalogLevelSensor` (`impl Application`) — `setup` / `main_loop` /
-    `on_shutdown`, the mA→level/%/volume maths, power-pin handling, and the
-    `SIMULATE_AI` fallback (mirrors `application.py`).
-- `Cargo.toml`, `Dockerfile`.
+The Python tests are ported alongside each module (`cargo test`).
 
-## Config
+## Schemas
 
-The typed `AnalogLevelSensorConfig` produces the **same** `config_schema` keys
-as the Python app (`ai_pin`, `sensor_maximum_metres`, `full_level`,
-`sensor_minimum_ma`, `sensor_maximum_ma`, `sensor_minimum_metres`,
-`empty_level`, `power_pin`, `polling_frequency`, `sensor_type`, `volume_curve`,
-`hide_volume`, `max_volume`, `volume_units`, `volume_decimal_precision`,
-`dv_app_position`). At runtime the config is read from the `deployment_config`
-channel (keyed by `APP_KEY`).
-
-Regenerate the repo's `doover_config.json` from the Rust schema (the built-in
-`export` subcommand — the counterpart of the Python `export-config`):
-
-```sh
-cargo run -- export ../doover_config.json --app-name analog_level_sensor
-```
+`cargo run -- export ../doover_config.json --app-name analog_level_sensor`
+writes the config, UI and notification schemas. `src/main.rs` has a test that
+requires them to equal the Python app's export, kept in
+`tests/fixtures/python_export.json`; after changing the Python app, refresh it
+with `scripts/check-export.sh` (needs `uv`).
 
 ## Env
 
-- `DDA_URI` (default `127.0.0.1:50051`) — the device agent.
-- `PLT_URI` (default `127.0.0.1:50053`) — the platform interface.
-- `APP_KEY` — the app instance key (drives config + tag namespacing).
-- `SIMULATE_AI` — test only. Synthesise a noisy in-range mA value instead of
-  reading the platform interface, to exercise the loop without the platform
-  serial round-trip.
+- `DDA_URI` (default `localhost:50051`), `PLT_URI` (default `127.0.0.1:50053`),
+  `APP_KEY` — as for any Doover app.
+- `RUST_LOG` — log filter (default `info`). The per-sample reading is logged at
+  `debug` (Python logs it at INFO, which at 40 Hz costs a lot of CPU).
+- `SIMULATE_AI` — test only: synthesise a noisy in-range mA value instead of
+  reading the platform interface.
 
 ## Build
 
-During local development the app depends on the sibling `doover-rs` checkout by
-**path** (`../../doover-rs/doover` in `Cargo.toml`), so it tracks library
-changes immediately:
+doover-rs is a pinned git dependency (a release tag in `Cargo.toml`). To work
+against a local checkout without editing it:
 
 ```sh
-# local dev — requires ../../doover-rs alongside this repo
-cd rust && cargo build --release
-
-# regenerate config + run
-cargo run -- export ../doover_config.json --app-name analog_level_sensor
-DDA_URI=127.0.0.1:50051 PLT_URI=127.0.0.1:50053 APP_KEY=analog_level_sensor_1 \
-  cargo run --release
+cargo build --config 'patch."https://github.com/getdoover/doover-rs".doover.path="../../doover-rs/doover"'
 ```
 
-Because the dependency is a path, the container image must be built from the
-directory that holds **both** repos (see the `Dockerfile` header):
+The image (a static musl binary on `scratch`) builds from the repo root:
 
 ```sh
-cd ~/Coding/doover
-docker build -f analog-level-sensor/rust/Dockerfile \
-  -t ghcr.io/getdoover/analog-level-sensor-rs:main .
+docker build -f rust/Dockerfile -t analog-level-sensor-rs:dev .
 ```
-
-For a self-contained CI build, pin `doover-rs` as a git dependency in
-`Cargo.toml` (see the comment there) and build with just `rust/` as context.
