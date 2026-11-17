@@ -10,16 +10,16 @@ name = "analog-level-sensor"
 path = "src/main.rs"
 
 [dependencies]
-# The Rust equivalent of pydoover. During local development we depend on the
-# sibling doover-rs checkout by path so the app tracks library changes
-# immediately. For CI / reproducible image builds, swap this for a pinned git
-# revision (or a published version once doover-rs cuts releases), e.g.:
-#   doover = { git = "https://github.com/getdoover/doover-rs", rev = "…" }
-doover = { path = "../../doover-rs/doover" }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time"] }
+# The Rust equivalent of pydoover, pinned to a release tag for reproducible
+# builds (the image builds with only rust/ as its context; cargo fetches it).
+# For local work against a doover-rs checkout, override it without editing
+# this file, e.g. in ~/.cargo/config.toml or with
+#   cargo build --config 'patch."https://github.com/getdoover/doover-rs".doover.path="../../doover-rs/doover"'
+doover = { git = "https://github.com/getdoover/doover-rs", tag = "0.1.5" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time", "sync"] }
 serde_json = "1"
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [profile.release]
 lto = true
