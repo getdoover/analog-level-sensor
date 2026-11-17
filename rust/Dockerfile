@@ -1,31 +1,27 @@
-# Rust build for the analog level sensor.
+# Rust build of the analog level sensor. Build from the repo root:
 #
-# The app depends on the sibling doover-rs checkout by path
-# (../../doover-rs/doover), so the build CONTEXT must be the parent directory
-# that holds both `analog-level-sensor/` and `doover-rs/`. Build from there:
+#   docker build -f rust/Dockerfile -t analog-level-sensor-rs:dev .
 #
-#   cd ~/Coding/doover
-#   docker build -f analog-level-sensor/rust/Dockerfile \
-#     -t ghcr.io/getdoover/analog-level-sensor-rs:main .
-#
-# (For a self-contained CI build, pin doover-rs as a git dependency in
-# rust/Cargo.toml instead — see the comment there — and build with just the
-# rust/ dir as context.)
+# doover-rs is a pinned git dependency (rust/Cargo.toml), so no sibling
+# checkout is needed in the build context.
 
 FROM rust:1-alpine AS builder
 # musl-dev: static linking. protobuf-dev: doover-proto's build script needs
-# protoc (on Alpine/musl the vendored protoc isn't used).
-RUN apk add --no-cache musl-dev protobuf-dev
+# protoc (on Alpine/musl the vendored protoc isn't used). git: the doover-rs
+# git dependency.
+RUN apk add --no-cache musl-dev protobuf-dev git
 ENV PROTOC=/usr/bin/protoc
+ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
 WORKDIR /build
-# Copy the library (whole workspace, so its members resolve) and the app.
-# A clean doover-rs checkout (no target/) keeps this fast.
-COPY doover-rs/ ./doover-rs/
-COPY analog-level-sensor/rust/ ./analog-level-sensor/rust/
-WORKDIR /build/analog-level-sensor/rust
-RUN cargo build --release
+COPY rust/ ./
+RUN cargo build --release --locked
 
-# Fully static musl binary -> runs on scratch (final image ~2 MB).
+# Fully static musl binary -> runs on scratch (image of a few MB).
 FROM scratch
-COPY --from=builder /build/analog-level-sensor/rust/target/release/analog-level-sensor /analog-level-sensor
+# The same labels as the Python image, so the device agent manages it alike.
+LABEL com.doover.app="true"
+LABEL com.doover.managed="true"
+COPY --from=builder /build/target/release/analog-level-sensor /analog-level-sensor
+# A scratch image has no curl: the binary probes its own healthcheck server.
+HEALTHCHECK --interval=30s --timeout=2s --start-period=5s CMD ["/analog-level-sensor", "healthcheck"]
 ENTRYPOINT ["/analog-level-sensor"]
