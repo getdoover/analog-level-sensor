@@ -170,5 +170,10 @@ cython_debug/
 # Ruff stuff:
 .ruff_cache/
 
+# Processor build artifacts
+requirements.txt
+packages_export/
+package.zip
+
 # PyPI configuration file
 .pypirc

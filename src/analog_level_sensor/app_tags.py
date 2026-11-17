@@ -1,8 +1,17 @@
-from pydoover.tags import Tag, Tags
+from pydoover.tags import Tag
+
+from common.common_tags import CommonAnalogLevelSensorTags
 
 
-class AnalogLevelSensorTags(Tags):
-    level_filled_percentage = Tag("number", default=None, live=True)
-    level_reading = Tag("number", default=None, live=True)
-    raw_level_reading = Tag("number", default=None)
-    level_volume = Tag("number", default=None)
+class AnalogLevelSensorDeviceTags(CommonAnalogLevelSensorTags):
+    # Operator Sensor Calibration readbacks (calibration.py): the values the
+    # 4-20 mA conversion is using now. Only published while the feature is
+    # enabled, so they stay None on a deployment that has it off; the HMI
+    # locks its Sensor cells unless operator_calibration is true.
+    zero_m = Tag("number", default=None, live=True)
+    span_m = Tag("number", default=None, live=True)
+    fluid_density = Tag("number", default=None, live=True)
+    operator_calibration = Tag("boolean", default=None, live=True)
+
+
+AnalogLevelSensorTags = AnalogLevelSensorDeviceTags

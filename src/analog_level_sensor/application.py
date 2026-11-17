@@ -1,22 +1,28 @@
-import logging
-
+from pydoover import ui
 from pydoover.docker import Application
+from pydoover.rpc import RPCError
 
-from .app_config import AnalogLevelSensorConfig, SensorType
-from .app_tags import AnalogLevelSensorTags
-from .app_ui import AnalogLevelSensorUI
+from common.common_app import CommonAnalogLevelSensorApplication
+
+from . import calibration
+from .alarm import Alarm, AlarmType, evaluate
+from .app_config import AlarmSource, AnalogLevelSensorDeviceConfig
+from .app_notifications import AnalogLevelSensorDeviceNotifications
+from .app_tags import AnalogLevelSensorDeviceTags
+from .app_ui import AnalogLevelSensorDeviceUI
 
 
-log = logging.getLogger()
+class AnalogLevelSensorDeviceApplication(
+    Application,
+    CommonAnalogLevelSensorApplication,
+):
+    config: AnalogLevelSensorDeviceConfig
+    tags: AnalogLevelSensorDeviceTags
 
-
-class AnalogLevelSensorApplication(Application):
-    config: AnalogLevelSensorConfig
-    tags: AnalogLevelSensorTags
-
-    config_cls = AnalogLevelSensorConfig
-    tags_cls = AnalogLevelSensorTags
-    ui_cls = AnalogLevelSensorUI
+    config_cls = AnalogLevelSensorDeviceConfig
+    tags_cls = AnalogLevelSensorDeviceTags
+    ui_cls = AnalogLevelSensorDeviceUI
+    notifications_cls = AnalogLevelSensorDeviceNotifications
 
     async def setup(self):
         if self.config.power_pin.value is not None:
@@ -26,106 +32,155 @@ class AnalogLevelSensorApplication(Application):
         if freq and freq > 0:
             self.loop_target_period = 1 / freq
 
-    async def main_loop(self):
-        result = await self.platform_iface.fetch_ai(int(self.config.ai_pin.value))
-        log.info(f"Level sensor reading: {result}")
+        self.alarm = Alarm(
+            grace_period=self.config.alarm_grace_period,
+            renotify_interval=self.config.alarm_renotify_interval,
+        )
 
-        if result is None or result < self.config.sensor_min_mA.value:
-            return
+        # Before the first reading: an offline reboot restores the operator
+        # calibration from its readback tags, which a publish would overwrite.
+        self.calibration = calibration.SensorCalibration(self)
+        await self.calibration.startup()
+
+    async def main_loop(self):
+        await self.calibration.maintain()
+
+        result = await self.platform_iface.fetch_ai(int(self.config.ai_pin.value))
 
         if self.config.power_pin.value is not None:
             await self.platform_iface.set_do(int(self.config.power_pin.value), True)
 
-        await self.tags.level_filled_percentage.set(self._filled_percentage(result))
-        await self.tags.level_reading.set(self._level_reading(result))
-        await self.tags.raw_level_reading.set(result)
-        if not self.config.hide_volume.value:
-            await self.tags.level_volume.set(self._volume(result))
+        await self.handle_update(result)
 
-    def _map_value(self, value, low_a, high_a, low_b, high_b, invert=False):
-        if invert and self.config.type.value == SensorType.RADAR:
-            return (high_b - low_b) - ((value - low_a) / (high_a - low_a)) * (
-                high_b - low_b
-            )
-        return ((value - low_a) / (high_a - low_a)) * (high_b - low_b) + low_b
+    async def handle_update(self, result):
+        reading = await super().handle_update(result)
 
-    def _sensor_percentage(self, reading) -> float:
-        return self._map_value(
-            reading,
-            self.config.sensor_min_mA.value,
-            self.config.sensor_max_mA.value,
-            0,
-            100,
-            invert=True,
+        # No level was published from this sample (a sensor fault, or an
+        # under-range sample not yet a fault): keep the alarm blind to it too
+        # rather than alarm on a reading the rest of the app does not trust.
+        if reading is None:
+            return
+
+        await self._check_alarm(reading)
+
+    # -- Operator Sensor Calibration (calibration.py) ---------------------------
+    # The 4-20 mA conversion (common_app._level_reading) runs on these, so the
+    # level, display, percentage, volume and alarm all follow the operator's
+    # values. With the feature off they are the config, exactly as before.
+
+    def _calibration_active(self) -> bool:
+        return (
+            self.config.operator_calibration_enabled
+            and getattr(self, "calibration", None) is not None
         )
 
-    def _level_reading(self, reading) -> float:
-        perc = self._sensor_percentage(reading)
-        return self._map_value(
-            perc,
-            0,
-            100,
-            self.config.sensor_min_m.value,
-            self.config.sensor_max_m.value,
-        )
+    def _zero_m(self):
+        if self._calibration_active():
+            return self.calibration.effective().zero_m
+        return super()._zero_m()
 
-    def _filled_percentage(self, reading) -> float | None:
-        lev = self._level_reading(reading)
+    def _span_m(self):
+        if self._calibration_active():
+            return self.calibration.effective().span_m
+        return super()._span_m()
 
-        curve = self.config.volume_curve.elements
-        if len(curve) < 2:
-            return self._map_value(
-                lev, self.config.empty_level.value, self.config.full_level.value, 0, 100
-            )
+    def _fluid_density(self) -> float:
+        if self._calibration_active():
+            return self.calibration.effective().fluid_density
+        return super()._fluid_density()
 
-        vol = self._get_volume(lev, curve)
-        max_vol = self._get_max_volume(curve)
-        if vol is None or max_vol is None:
-            return None
-        return round(vol / max_vol * 100, 3)
+    @ui.handler(calibration.RPC_PATTERN, auto_update=False)
+    async def on_calibration_value(self, ctx, value):
+        """``zero_m`` / ``span_m`` / ``fluid_density`` from the cloud input or
+        the HMI. No ``parser=float``: pydoover reports a parser exception as
+        INTERNAL_ERROR, so the value is parsed here and a non-numeric one gets
+        INVALID like an out-of-range one. The value is stored by the request
+        itself (``auto_update=False``), so a refused one leaves ui_cmds as is."""
+        applied = await self._sensor_calibration().request(ctx.method, value)
+        return {ctx.method: applied}
 
-    def _volume(self, reading) -> float | None:
-        curve = self.config.volume_curve.elements
-        if len(curve) >= 2:
-            return self._get_volume(self._level_reading(reading), curve)
+    @ui.handler(calibration.RESET_ELEMENT, auto_update=False)
+    async def on_reset_calibration(self, ctx, value):
+        return await self._sensor_calibration().reset()
 
-        perc = self._filled_percentage(reading)
-        if perc is None:
-            return None
-        return self.config.max_volume.value * (perc / 100)
+    def _sensor_calibration(self) -> calibration.SensorCalibration:
+        # ui_cmds is subscribed before setup() creates it.
+        setting = getattr(self, "calibration", None)
+        if setting is None:
+            raise RPCError("UNAVAILABLE", "the sensor app is still starting")
+        return setting
 
     async def on_shutdown_at(self, _seconds: int):
         if self.config.power_pin.value is not None:
             await self.platform_iface.set_do(int(self.config.power_pin.value), False)
 
+    def _alarm_value(self, result):
+        """The quantity the alarm tracks, derived from the raw sensor reading."""
+        source = self.config.alarm_source
+        if source is AlarmSource.percentage:
+            return self._filled_percentage(result)
+        if source is AlarmSource.volume:
+            return self._volume(result)
+        # The slider bounds and the notification message are both in the
+        # configured depth unit, so compare on that scale rather than in the
+        # canonical metres level_reading carries.
+        return self.config.metres_to_depth_units(self._level_reading(result))
+
     @staticmethod
-    def _get_volume(level, volume_curve):
-        if not volume_curve:
+    def _slider_value(slider):
+        """A slider the operator has never moved has no stored value, and these
+        sliders have no default, so reading one raises. Treat that as unset."""
+        try:
+            return slider.value
+        except KeyError:
             return None
 
-        # Sort (level, volume) pairs together as floats so the mapping is
-        # preserved even if config values arrive as strings.
-        points = sorted(
-            (float(p.level.value), float(p.volume.value)) for p in volume_curve
+    def _alarm_bounds(self):
+        """Read the alarm setpoint(s) from whichever slider the mode is using.
+
+        Returns (point, low, high). Any of them may be None when the operator
+        has not moved the slider yet, which evaluate() treats as "no bound".
+        """
+        if self.config.alarm_type is AlarmType.allowed_range:
+            value = self._slider_value(self.ui.alarm_range)
+            # the dual slider reports [low, high], but not always in that order
+            if not isinstance(value, (list, tuple)) or len(value) != 2:
+                return None, None, None
+            low, high = sorted(value)
+            return None, low, high
+
+        return self._slider_value(self.ui.alarm_point), None, None
+
+    async def _check_alarm(self, result):
+        if not self.config.alarm_enabled:
+            self.alarm.clear()
+            return
+
+        point, low, high = self._alarm_bounds()
+        reading = self._alarm_value(result)
+        breach = evaluate(
+            reading, self.config.alarm_type, point=point, low=low, high=high
         )
 
-        # Interpolate within the curve.
-        for (x1, y1), (x2, y2) in zip(points, points[1:]):
-            if x1 <= level <= x2:
-                return y1 + (level - x1) * (y2 - y1) / (x2 - x1)
-
-        # Outside the curve's range, extrapolate off the nearest end segment.
-        # This intentionally allows volume (and filled %) to run past the
-        # curve's bounds so misconfiguration shows up rather than being hidden.
-        if level < points[0][0]:
-            (x1, y1), (x2, y2) = points[0], points[1]
-        else:
-            (x1, y1), (x2, y2) = points[-2], points[-1]
-
-        return y1 + (level - x1) * (y2 - y1) / (x2 - x1)
+        if self.alarm.update(breach):
+            # No title: the server substitutes the agent's display name, which
+            # is the device name and is what an operator expects to see.
+            await self.notifications.level_alarm.send(
+                self._alarm_message(reading, breach)
+            )
 
     @staticmethod
-    def _get_max_volume(volume_curve):
-        if not volume_curve:
-            return None
-        return max(point.volume.value for point in volume_curve)
+    def _format_value(value):
+        return f"{round(value, 2):g}"
+
+    def _alarm_message(self, reading, breach):
+        units = self.config.alarm_units
+        suffix = f" {units}" if units else ""
+        return (
+            f"{self.app_display_name} has {breach.direction.value} "
+            f"{self._format_value(breach.bound)}{suffix} with a value of "
+            f"{self._format_value(reading)}{suffix}"
+        )
+
+
+AnalogLevelSensorApplication = AnalogLevelSensorDeviceApplication
