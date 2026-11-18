@@ -42,7 +42,7 @@ mod ui;
 mod util;
 
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use doover::error::Result;
 use doover::notifications::NotificationDecl;
@@ -102,7 +102,15 @@ struct AnalogLevelSensor {
     simulate: bool,
     rng: u64,
     t: u64,
+    /// When the loop last drove the power pin (see [`POWER_REFRESH`]).
+    power_at: Option<Instant>,
 }
+
+/// How often the loop re-drives the sensor's power pin. The Python app drove
+/// it on every loop: a platform-interface call per loop, at 50 Hz, for a pin
+/// that does not change. A pin changed by something else is put back within
+/// this long.
+const POWER_REFRESH: Duration = Duration::from_secs(10);
 
 /// Drive the sensor's power pin, when one is configured. (A free function:
 /// the app holds its UI, which is not `Sync`, so `&self` cannot cross an
@@ -224,6 +232,7 @@ impl Application for AnalogLevelSensor {
             simulate,
             rng: seed,
             t: 0,
+            power_at: None,
         }
     }
 
@@ -261,6 +270,7 @@ impl Application for AnalogLevelSensor {
         }
 
         set_power_pin(self.plt.as_ref(), self.config.raw.power_pin, true).await?;
+        self.power_at = Some(Instant::now());
 
         // Operator Sensor Calibration, before the first reading: an offline
         // reboot restores it from the readback tags, which a publish would
@@ -320,7 +330,10 @@ impl Application for AnalogLevelSensor {
                 .await? as f64
         };
 
-        set_power_pin(self.plt.as_ref(), self.config.raw.power_pin, true).await?;
+        if self.power_at.is_none_or(|at| at.elapsed() >= POWER_REFRESH) {
+            set_power_pin(self.plt.as_ref(), self.config.raw.power_pin, true).await?;
+            self.power_at = Some(Instant::now());
+        }
 
         let reading = conversion::handle_update(
             &self.config,
