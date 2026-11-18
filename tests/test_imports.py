@@ -1,18 +1,9 @@
 """
-Basic tests for the application.
+Basic tests for the processor.
 
-This ensures all modules are importable and that the config is valid.
+This ensures all modules are importable and that the config is valid. The
+device app is Rust, in device/, with its own tests.
 """
-
-
-def test_import_app():
-    from analog_level_sensor.application import (
-        AnalogLevelSensorApplication,
-        AnalogLevelSensorDeviceApplication,
-    )
-
-    assert AnalogLevelSensorApplication
-    assert AnalogLevelSensorDeviceApplication
 
 
 def test_import_processor_app():
@@ -26,25 +17,21 @@ def test_import_processor_app():
 
 
 def test_config():
-    from analog_level_sensor.app_config import (
-        AnalogLevelSensorConfig,
-        AnalogLevelSensorDeviceConfig,
-    )
     from analog_level_sensor_processor.app_config import (
         AnalogLevelSensorProcessorConfig,
     )
     from common.common_config import CommonAnalogLevelSensorConfig
 
-    assert isinstance(AnalogLevelSensorConfig.to_schema(), dict)
-    assert isinstance(AnalogLevelSensorDeviceConfig.to_schema(), dict)
     assert isinstance(AnalogLevelSensorProcessorConfig.to_schema(), dict)
     assert isinstance(CommonAnalogLevelSensorConfig.to_schema(), dict)
 
 
 def test_input_config_keeps_legacy_keys_with_generic_labels():
-    from analog_level_sensor.app_config import AnalogLevelSensorDeviceConfig
+    from analog_level_sensor_processor.app_config import (
+        AnalogLevelSensorProcessorConfig,
+    )
 
-    schema = AnalogLevelSensorDeviceConfig.to_schema()
+    schema = AnalogLevelSensorProcessorConfig.to_schema()
     props = schema["properties"]
 
     assert "input_units" in props
@@ -53,20 +40,16 @@ def test_input_config_keeps_legacy_keys_with_generic_labels():
 
 
 def test_ui():
-    from analog_level_sensor.app_ui import AnalogLevelSensorUI
     from analog_level_sensor_processor.app_ui import AnalogLevelSensorProcessorUI
     from common.common_ui import CommonAnalogLevelSensorUI
 
-    assert AnalogLevelSensorUI
     assert AnalogLevelSensorProcessorUI
     assert CommonAnalogLevelSensorUI
 
 
 def test_tags():
-    from analog_level_sensor.app_tags import AnalogLevelSensorTags
     from analog_level_sensor_processor.app_tags import AnalogLevelSensorProcessorTags
     from common.common_tags import CommonAnalogLevelSensorTags
 
-    assert AnalogLevelSensorTags
     assert AnalogLevelSensorProcessorTags
     assert CommonAnalogLevelSensorTags

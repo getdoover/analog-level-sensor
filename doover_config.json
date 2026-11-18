@@ -1,24 +1,4 @@
 {
-    "analog_level_sensor": {
-        "id": 144013263405893128,
-        "name": "analog_level_sensor",
-        "display_name": "Analog Level Sensor",
-        "type": "DEV",
-        "visibility": "PUB",
-        "allow_many": true,
-        "description": "App for analog (4-20mA) level sensors. Both radar and submersible sensors are supported.",
-        "long_description": "README.md",
-        "icon_url": "https://cdn.jsdelivr.net/gh/getdoover/app-icons@8c12abb194b9239150c9ecd1b7f516f41d27ddd7/icons/analog_level_sensor.png",
-        "depends_on": [
-            "platform_interface"
-        ],
-        "organisation_id": null,
-        "image_name": "registry.doover.com/apps/analog_level_sensor:main",
-        "build_args": "--platform linux/amd64,linux/arm64",
-        "staging_config": {
-            "id": 179478624141861898
-        }
-    },
     "analog_level_sensor_processor": {
         "id": 193235363894938628,
         "name": "analog_level_sensor_processor",

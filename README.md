@@ -14,7 +14,7 @@
 
 ## Overview
 
-Monitors water level using analog readings such as 4-20 mA or voltage inputs. The Docker device app reads a local analog input, while the processor app reads a configured path from subscribed cloud messages. Both variants share the same level, percentage, volume, tags, and UI logic.
+Monitors water level using analog readings such as 4-20 mA or voltage inputs. The device app (Rust, in `device/`) reads a local analog input, while the processor app (Python, in `src/`) reads a configured path from subscribed cloud messages. Both variants produce the same level, percentage, volume, tags, and UI.
 
 Key capabilities:
 
