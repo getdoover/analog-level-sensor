@@ -15,7 +15,7 @@ path = "src/main.rs"
 # For local work against a doover-rs checkout, override it without editing
 # this file, e.g. in ~/.cargo/config.toml or with
 #   cargo build --config 'patch."https://github.com/getdoover/doover-rs".doover.path="../../doover-rs/doover"'
-doover = { git = "https://github.com/getdoover/doover-rs", tag = "0.1.5" }
+doover = { git = "https://github.com/getdoover/doover-rs", tag = "0.1.6" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time", "sync"] }
 serde_json = "1"
 tracing = "0.1"

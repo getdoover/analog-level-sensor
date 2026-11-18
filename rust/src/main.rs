@@ -30,23 +30,26 @@
 //!     cargo run --release
 //!
 //! Set SIMULATE_AI=1 to synthesise a noisy 4–20 mA signal instead of reading
-//! the platform interface.
+//! the platform interface. ALS_READ_MODE=poll reads with one `fetch_ai` per
+//! loop instead of following the process image (see [`scan`]).
 
 mod alarm;
 mod calibration;
 mod config;
 mod conversion;
 mod device;
+mod scan;
 mod tags;
 mod ui;
 mod util;
 
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use doover::error::Result;
 use doover::notifications::NotificationDecl;
 use doover::rpc::RpcError;
+use doover::docker::{ChannelQuality, ImageWatch};
 use doover::{AppContext, Application, Event, EventSubscription, Notifications, PlatformClient};
 use serde_json::{json, Map, Value};
 use tokio::sync::Mutex;
@@ -55,6 +58,7 @@ use crate::alarm::Alarm;
 use crate::calibration::{CalibrationConfig, SensorCalibration, UiCmdsWriter};
 use crate::config::DeviceConfig;
 use crate::conversion::{Conversion, FaultTracker, Params};
+use crate::scan::{ReadMode, ScanStats};
 use crate::tags::{DeviceTags, PendingTags};
 use crate::ui::DeviceUi;
 
@@ -100,7 +104,18 @@ struct AnalogLevelSensor {
     simulate: bool,
     rng: u64,
     t: u64,
+    /// ALS_READ_MODE (see [`scan`]).
+    mode: ReadMode,
+    /// The process image, in image mode.
+    watch: Option<ImageWatch>,
+    stats: ScanStats,
+    /// When the power pin was last driven: every [`POWER_REFRESH`], not every loop.
+    power_at: Option<Instant>,
 }
+
+/// How often the loop re-drives the sensor's power pin (the Python app does
+/// it every loop: a gRPC write per loop for a pin that does not change).
+const POWER_REFRESH: Duration = Duration::from_secs(10);
 
 /// Drive the sensor's power pin, when one is configured. (A free function:
 /// the app holds its UI, which is not `Sync`, so `&self` cannot cross an
@@ -213,6 +228,10 @@ impl Application for AnalogLevelSensor {
             simulate,
             rng: seed,
             t: 0,
+            mode: ReadMode::from_env(),
+            watch: None,
+            stats: ScanStats::new(ReadMode::from_env()),
+            power_at: None,
         }
     }
 
@@ -227,10 +246,13 @@ impl Application for AnalogLevelSensor {
     fn loop_target_period(&self) -> Duration {
         // Python setup: `self.loop_target_period = 1 / freq` when freq > 0.
         let freq = self.config.raw.polling_frequency;
-        if freq > 0.0 {
-            Duration::from_secs_f64(1.0 / freq)
-        } else {
-            Duration::from_secs(1)
+        let period =
+            if freq > 0.0 { Duration::from_secs_f64(1.0 / freq) } else { Duration::from_secs(1) };
+        match self.mode {
+            // The image paces the loop (main_loop waits for the next one);
+            // the timer only has to be no faster than the images come.
+            ReadMode::Image if !self.simulate => period.max(scan::FRAME),
+            _ => period,
         }
     }
 
@@ -241,12 +263,21 @@ impl Application for AnalogLevelSensor {
             let plt_uri =
                 if plt_uri.contains("://") { plt_uri } else { format!("http://{plt_uri}") };
             tracing::info!("connecting to platform interface at {plt_uri}");
-            self.plt = Some(PlatformClient::connect(plt_uri).await?);
+            let plt = PlatformClient::connect(plt_uri).await?;
+            if self.mode == ReadMode::Image {
+                let max_rate = scan::max_rate_hz(self.config.raw.polling_frequency);
+                tracing::info!("reading the process image (watch_image, max rate {max_rate:?})");
+                self.watch = Some(plt.watch_image(max_rate));
+            } else {
+                tracing::info!("polling fetch_ai every loop");
+            }
+            self.plt = Some(plt);
         } else {
             tracing::warn!("SIMULATE_AI set: synthesising AI values (platform interface NOT read)");
         }
 
         set_power_pin(self.plt.as_ref(), self.config.raw.power_pin, true).await?;
+        self.power_at = Some(Instant::now());
 
         // Operator Sensor Calibration, before the first reading: an offline
         // reboot restores it from the readback tags, which a publish would
@@ -281,6 +312,25 @@ impl Application for AnalogLevelSensor {
     }
 
     async fn main_loop(&mut self, ctx: &AppContext) -> Result<()> {
+        // Image mode: wait for the next image first, so the loop runs once
+        // per image and everything after this is the scan's own work.
+        let mut input = None;
+        if let Some(watch) = self.watch.as_mut() {
+            let latest = watch.changed().await?;
+            self.stats.image(latest.image.sequence, latest.age());
+            let pin = self.config.raw.ai_pin as i32;
+            match latest.image.ai_quality(pin) {
+                // fetch_ai's errors: no value to convert this scan.
+                ChannelQuality::Offline | ChannelQuality::Stale | ChannelQuality::NoValue => {
+                    tracing::debug!("AI{pin} has no usable value: {:?}", latest.image.ai_quality(pin));
+                    self.stats.loop_done(Duration::ZERO);
+                    return Ok(());
+                }
+                // A fault or out-of-range reading keeps its value, as fetch_ai does.
+                _ => input = latest.image.ai(pin),
+            }
+        }
+        let started = Instant::now();
         let mut tags = PendingTags::new(ctx);
         let params = {
             let mut cal = self.calibration.lock().await;
@@ -295,12 +345,17 @@ impl Application for AnalogLevelSensor {
 
         let result = if self.simulate {
             self.simulated_ma()
+        } else if let Some(value) = input {
+            value
         } else {
             let pin = self.config.raw.ai_pin as i32;
             self.plt.as_ref().expect("platform connected in setup").fetch_ai(pin).await? as f64
         };
 
-        set_power_pin(self.plt.as_ref(), self.config.raw.power_pin, true).await?;
+        if self.power_at.is_none_or(|at| at.elapsed() >= POWER_REFRESH) {
+            set_power_pin(self.plt.as_ref(), self.config.raw.power_pin, true).await?;
+            self.power_at = Some(Instant::now());
+        }
 
         let reading =
             conversion::handle_update(&self.config, params, &mut self.fault, Some(result), &mut tags);
@@ -325,7 +380,9 @@ impl Application for AnalogLevelSensor {
             }
         }
 
-        tags.flush().await
+        let flushed = tags.flush().await;
+        self.stats.loop_done(started.elapsed());
+        flushed
     }
 
     async fn on_aggregate_update(&mut self, ctx: &AppContext, event: &Event) -> Result<()> {
