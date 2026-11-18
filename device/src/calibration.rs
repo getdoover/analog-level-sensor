@@ -127,7 +127,11 @@ pub const DENSITY: CalibrationValue = CalibrationValue {
 pub const VALUES: [CalibrationValue; 3] = [ZERO, SPAN, DENSITY];
 
 pub fn by_name(name: &str) -> Option<(usize, CalibrationValue)> {
-    VALUES.iter().copied().enumerate().find(|(_, v)| v.name == name)
+    VALUES
+        .iter()
+        .copied()
+        .enumerate()
+        .find(|(_, v)| v.name == name)
 }
 
 impl CalibrationValue {
@@ -140,8 +144,16 @@ impl CalibrationValue {
     }
 
     fn in_range(&self, n: f64) -> bool {
-        let above = if self.min_inclusive { n >= self.minimum } else { n > self.minimum };
-        let below = if self.max_inclusive { n <= self.maximum } else { n < self.maximum };
+        let above = if self.min_inclusive {
+            n >= self.minimum
+        } else {
+            n > self.minimum
+        };
+        let below = if self.max_inclusive {
+            n <= self.maximum
+        } else {
+            n < self.maximum
+        };
         above && below
     }
 
@@ -158,8 +170,16 @@ impl CalibrationValue {
     pub fn describe_range(&self) -> String {
         let low = if self.min_inclusive { "" } else { "above " };
         let high = if self.max_inclusive { "" } else { "below " };
-        let units = if self.units.is_empty() { String::new() } else { format!(" {}", self.units) };
-        format!("{low}{} to {high}{}{units}", format_g(self.minimum), format_g(self.maximum))
+        let units = if self.units.is_empty() {
+            String::new()
+        } else {
+            format!(" {}", self.units)
+        };
+        format!(
+            "{low}{} to {high}{}{units}",
+            format_g(self.minimum),
+            format_g(self.maximum)
+        )
     }
 }
 
@@ -345,7 +365,9 @@ impl OperatorValue {
         if env.ui_cmds_synced || self.observed(env).is_some() {
             return;
         }
-        let Some(number) = self.spec.parse(persisted) else { return };
+        let Some(number) = self.spec.parse(persisted) else {
+            return;
+        };
         if let Some(default) = self.default(env) {
             if number == round_dp(default, DECIMALS) {
                 return;
@@ -410,7 +432,11 @@ impl OperatorValue {
         self.setting(env);
         if self.repersist {
             self.repersist = false;
-            tracing::info!("ui_cmds synced an older {}; keeping {:?}", self.spec.label, self.value);
+            tracing::info!(
+                "ui_cmds synced an older {}; keeping {:?}",
+                self.spec.label,
+                self.value
+            );
             return Some(self.payload(env));
         }
         if let Some((Some(value), marker)) = self.seen {
@@ -445,10 +471,18 @@ impl SensorCalibration {
         Self::with_clock(config, Box::new(move || epoch.elapsed().as_secs_f64()))
     }
 
-    pub fn with_clock(config: CalibrationConfig, clock: Box<dyn Fn() -> f64 + Send + Sync>) -> Self {
+    pub fn with_clock(
+        config: CalibrationConfig,
+        clock: Box<dyn Fn() -> f64 + Send + Sync>,
+    ) -> Self {
         Self {
             values: VALUES.map(OperatorValue::new),
-            env: Env { config, ui_values: Map::new(), ui_cmds_synced: false, clock },
+            env: Env {
+                config,
+                ui_values: Map::new(),
+                ui_cmds_synced: false,
+                clock,
+            },
             inverted_logged: None,
         }
     }
@@ -487,7 +521,11 @@ impl SensorCalibration {
                 span_m = span.default(env);
             }
         }
-        Effective { zero_m, span_m, fluid_density: density.value(env) }
+        Effective {
+            zero_m,
+            span_m,
+            fluid_density: density.value(env),
+        }
     }
 
     /// Before anything publishes. Off: clear readback tags a previous enabled
@@ -495,7 +533,12 @@ impl SensorCalibration {
     /// (`synced`, from a bounded wait), then publish.
     pub fn startup(&mut self, synced: bool, tags: &mut dyn TagIo) {
         if !self.enabled() {
-            for name in [ZERO.name, SPAN.name, DENSITY.name, tags::OPERATOR_CALIBRATION] {
+            for name in [
+                ZERO.name,
+                SPAN.name,
+                DENSITY.name,
+                tags::OPERATOR_CALIBRATION,
+            ] {
                 if tags.get(name).is_some() {
                     tags.set(name, Value::Null);
                 }
@@ -563,19 +606,32 @@ impl SensorCalibration {
         writer: &mut dyn UiCmdsWriter,
     ) -> Result<f64, RpcError> {
         self.require_enabled()?;
-        let (i, spec) = by_name(name)
-            .ok_or_else(|| RpcError::new("INVALID", format!("unknown calibration value {name:?}")))?;
+        let (i, spec) = by_name(name).ok_or_else(|| {
+            RpcError::new("INVALID", format!("unknown calibration value {name:?}"))
+        })?;
         let number = self.values[i].check(value)?;
         if spec.kind != Kind::Density {
             let current = self.effective();
-            let zero = if spec.kind == Kind::Zero { Some(number) } else { current.zero_m };
-            let span = if spec.kind == Kind::Span { Some(number) } else { current.span_m };
+            let zero = if spec.kind == Kind::Zero {
+                Some(number)
+            } else {
+                current.zero_m
+            };
+            let span = if spec.kind == Kind::Span {
+                Some(number)
+            } else {
+                current.span_m
+            };
             if let (Some(z), Some(s)) = (zero, span) {
                 #[allow(clippy::neg_cmp_op_on_partial_ord)] // Python `not zero < span`
                 if !(z < s) {
                     return Err(RpcError::new(
                         "INVALID",
-                        format!("the zero ({} m) must be below the span ({} m)", format_g(z), format_g(s)),
+                        format!(
+                            "the zero ({} m) must be below the span ({} m)",
+                            format_g(z),
+                            format_g(s)
+                        ),
                     ));
                 }
             }
@@ -671,7 +727,10 @@ pub mod tests {
     }
 
     pub fn run<F: std::future::Future>(f: F) -> F::Output {
-        tokio::runtime::Builder::new_current_thread().build().unwrap().block_on(f)
+        tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap()
+            .block_on(f)
     }
 
     impl Harness {
@@ -687,10 +746,24 @@ pub mod tests {
             for (k, v) in persisted.as_object().cloned().unwrap_or_default() {
                 tags.store.insert(k, v);
             }
-            Self { config, cal, tags, writer: Writer { online: true, ..Default::default() }, clock }
+            Self {
+                config,
+                cal,
+                tags,
+                writer: Writer {
+                    online: true,
+                    ..Default::default()
+                },
+                clock,
+            }
         }
 
-        pub fn started(config: DeviceConfig, values: Value, synced: bool, persisted: Value) -> Self {
+        pub fn started(
+            config: DeviceConfig,
+            values: Value,
+            synced: bool,
+            persisted: Value,
+        ) -> Self {
             let mut h = Self::new(config, values, persisted);
             h.cal.startup(synced, &mut h.tags);
             h
@@ -705,7 +778,9 @@ pub mod tests {
         }
 
         pub fn request(&mut self, name: &str, value: Value) -> Result<f64, RpcError> {
-            run(self.cal.request(name, &value, &mut self.tags, &mut self.writer))
+            run(self
+                .cal
+                .request(name, &value, &mut self.tags, &mut self.writer))
         }
 
         pub fn reset(&mut self) -> Result<Effective, RpcError> {
@@ -776,7 +851,10 @@ pub mod tests {
     fn off_refuses_the_rpcs() {
         for method in ["zero_m", "span_m", "fluid_density"] {
             let mut h = Harness::started(make_config(json!({})), json!({}), true, json!({}));
-            assert_eq!(h.request(method, json!(1.0)).unwrap_err().code, "UNAVAILABLE");
+            assert_eq!(
+                h.request(method, json!(1.0)).unwrap_err().code,
+                "UNAVAILABLE"
+            );
             assert_eq!(h.reset().unwrap_err().code, "UNAVAILABLE");
             assert!(h.writer.aggregate_writes.is_empty());
         }
@@ -825,7 +903,10 @@ pub mod tests {
     fn invalid_message_quotes_the_value() {
         let mut h = Harness::on(json!({}));
         let err = h.request("zero_m", json!("abc")).unwrap_err();
-        assert_eq!(err.message, "the zero must be -100 to below 100 m, got 'abc'");
+        assert_eq!(
+            err.message,
+            "the zero must be -100 to below 100 m, got 'abc'"
+        );
     }
 
     #[test]
@@ -912,8 +993,10 @@ pub mod tests {
         h.echo(None);
         assert_eq!(h.eff().1, s(7.0));
         h.maintain();
-        let expected: Map<String, Value> =
-            json!({"span_m": 7.0, "span_m_default": null}).as_object().cloned().unwrap();
+        let expected: Map<String, Value> = json!({"span_m": 7.0, "span_m_default": null})
+            .as_object()
+            .cloned()
+            .unwrap();
         assert_eq!(h.writer.aggregate_writes, vec![expected]);
     }
 
@@ -1002,10 +1085,18 @@ pub mod tests {
             "sensor_maximum_metres": 8.0,
             "fluid_density": 1100,
         }));
-        let mut h = Harness::started(config, json!({"zero_m": 1.0, "span_m": 6.0}), true, json!({}));
+        let mut h = Harness::started(
+            config,
+            json!({"zero_m": 1.0, "span_m": 6.0}),
+            true,
+            json!({}),
+        );
         assert_eq!(h.eff().0, s(1.0));
         let result = h.reset().unwrap();
-        assert_eq!(result.to_json(), json!({"zero_m": 0.0, "span_m": 8.0, "fluid_density": 1100.0}));
+        assert_eq!(
+            result.to_json(),
+            json!({"zero_m": 0.0, "span_m": 8.0, "fluid_density": 1100.0})
+        );
         assert_eq!(
             Value::from(h.writer.aggregate_writes.clone()),
             json!([{
@@ -1025,7 +1116,9 @@ pub mod tests {
     #[test]
     fn after_reset_a_config_change_takes_effect_and_is_written_back() {
         let values = json!({"span_m": 8.0, "span_m_default": 8.0, "zero_m": 0.0});
-        let config = make_config(json!({"operator_calibration_enabled": true, "sensor_maximum_metres": 9.0}));
+        let config = make_config(
+            json!({"operator_calibration_enabled": true, "sensor_maximum_metres": 9.0}),
+        );
         let mut h = Harness::started(config, values, true, json!({}));
         assert_eq!(h.eff().1, s(9.0));
         h.maintain();
@@ -1162,7 +1255,9 @@ pub mod tests {
 
         fn pct(&mut self, reading: f64) -> f64 {
             let p = self.app_params();
-            Conversion::new(&self.config, p).filled_percentage(reading).unwrap()
+            Conversion::new(&self.config, p)
+                .filled_percentage(reading)
+                .unwrap()
         }
 
         fn vol(&mut self, reading: f64) -> f64 {
@@ -1226,7 +1321,10 @@ pub mod tests {
         let mut fault = FaultTracker::default();
         h.update(&mut fault, 12.0);
         assert!(approx(h.tags.value("level_reading").as_f64().unwrap(), 3.0));
-        assert!(approx(h.tags.value("level_filled_percentage").as_f64().unwrap(), 30.0));
+        assert!(approx(
+            h.tags.value("level_filled_percentage").as_f64().unwrap(),
+            30.0
+        ));
         assert_eq!(h.tags.value("zero_m"), json!(1.0));
         assert_eq!(h.tags.value("span_m"), json!(5.0));
     }
@@ -1255,7 +1353,11 @@ pub mod tests {
 
     #[test]
     fn labels_match_the_input_each_value_is_read_at() {
-        for (ty, zero_at, span_at) in [("Submersible", 4.0, 20.0), ("Radar", 20.0, 4.0), ("Radar Inverted", 4.0, 20.0)] {
+        for (ty, zero_at, span_at) in [
+            ("Submersible", 4.0, 20.0),
+            ("Radar", 20.0, 4.0),
+            ("Radar Inverted", 4.0, 20.0),
+        ] {
             let mut h = Harness::on(json!({"sensor_type": ty}));
             h.request("zero_m", json!(1.0)).unwrap();
             h.request("span_m", json!(5.0)).unwrap();
@@ -1298,10 +1400,22 @@ pub mod tests {
         assert!(approx(h.level(20.0), 2.0));
         let mut fault = FaultTracker::default();
         h.update(&mut fault, 4.0);
-        assert!(approx(h.tags.value("level_reading").as_f64().unwrap(), -0.15));
-        assert!(approx(h.tags.value("level_reading_display").as_f64().unwrap(), -0.15));
-        assert!(approx(h.tags.value("level_filled_percentage").as_f64().unwrap(), -1.5));
-        assert!(approx(h.tags.value("level_volume").as_f64().unwrap(), -15.0));
+        assert!(approx(
+            h.tags.value("level_reading").as_f64().unwrap(),
+            -0.15
+        ));
+        assert!(approx(
+            h.tags.value("level_reading_display").as_f64().unwrap(),
+            -0.15
+        ));
+        assert!(approx(
+            h.tags.value("level_filled_percentage").as_f64().unwrap(),
+            -1.5
+        ));
+        assert!(approx(
+            h.tags.value("level_volume").as_f64().unwrap(),
+            -15.0
+        ));
         assert_eq!(h.tags.value("zero_m"), json!(-0.15));
     }
 
@@ -1332,7 +1446,10 @@ pub mod tests {
         h.request("span_m", json!(3.0)).unwrap();
         assert!(approx(h.level(20.0), -0.2));
         assert!(approx(h.level(4.0), 3.0));
-        assert_eq!(h.request("span_m", json!(-0.1)).unwrap_err().code, "INVALID");
+        assert_eq!(
+            h.request("span_m", json!(-0.1)).unwrap_err().code,
+            "INVALID"
+        );
     }
 
     #[test]
@@ -1345,7 +1462,10 @@ pub mod tests {
         let reading = crate::device::alarm_value(&Conversion::new(&h.config, p), 4.0).unwrap();
         assert!(approx(reading, -0.15));
         let breach = evaluate(Some(reading), AlarmType::LessThan, Some(0.1), None, None).unwrap();
-        assert_eq!((breach.direction, breach.bound), (Direction::DroppedBelow, 0.1));
+        assert_eq!(
+            (breach.direction, breach.bound),
+            (Direction::DroppedBelow, 0.1)
+        );
         assert_eq!(crate::device::format_value(reading), "-0.15");
         let mut h = Harness::on(json!({"reading_type": "Filled Percentage"}));
         h.request("zero_m", json!(-0.15)).unwrap();

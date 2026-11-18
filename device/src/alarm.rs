@@ -127,7 +127,11 @@ impl Alarm {
         };
 
         let since = *self.breach_since.get_or_insert_with(|| {
-            tracing::debug!("Breach started: {} {}", breach.direction.as_str(), breach.bound);
+            tracing::debug!(
+                "Breach started: {} {}",
+                breach.direction.as_str(),
+                breach.bound
+            );
             now
         });
         if now - since < self.grace_period {
@@ -164,7 +168,10 @@ mod tests {
 
     impl Clocked {
         fn new(grace: f64, renotify: f64) -> Self {
-            Self { alarm: Alarm::new(grace, renotify), now: 1000.0 }
+            Self {
+                alarm: Alarm::new(grace, renotify),
+                now: 1000.0,
+            }
         }
         fn update(&mut self, b: Option<Breach>) -> bool {
             self.alarm.update_at(b, self.now)
@@ -188,7 +195,10 @@ mod tests {
 
     #[test]
     fn evaluate_greater_than() {
-        assert_eq!(evaluate(Some(11.0), GT, Some(10.0), None, None), breach(Direction::Exceeded, 10.0));
+        assert_eq!(
+            evaluate(Some(11.0), GT, Some(10.0), None, None),
+            breach(Direction::Exceeded, 10.0)
+        );
         assert_eq!(evaluate(Some(10.0), GT, Some(10.0), None, None), None);
         assert_eq!(evaluate(Some(9.0), GT, Some(10.0), None, None), None);
     }
@@ -206,8 +216,14 @@ mod tests {
     #[test]
     fn evaluate_allowed_range_reports_the_crossed_bound() {
         let (low, high) = (Some(1000.0), Some(4000.0));
-        assert_eq!(evaluate(Some(4500.0), RANGE, None, low, high), breach(Direction::Exceeded, 4000.0));
-        assert_eq!(evaluate(Some(300.0), RANGE, None, low, high), breach(Direction::DroppedBelow, 1000.0));
+        assert_eq!(
+            evaluate(Some(4500.0), RANGE, None, low, high),
+            breach(Direction::Exceeded, 4000.0)
+        );
+        assert_eq!(
+            evaluate(Some(300.0), RANGE, None, low, high),
+            breach(Direction::DroppedBelow, 1000.0)
+        );
         assert_eq!(evaluate(Some(2000.0), RANGE, None, low, high), None);
     }
 

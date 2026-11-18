@@ -53,7 +53,15 @@ impl<'a> Conversion<'a> {
         Self { config, params }
     }
 
-    fn map_value(&self, value: f64, low_a: f64, high_a: f64, low_b: f64, high_b: f64, invert: bool) -> f64 {
+    fn map_value(
+        &self,
+        value: f64,
+        low_a: f64,
+        high_a: f64,
+        low_b: f64,
+        high_b: f64,
+        invert: bool,
+    ) -> f64 {
         if invert && self.config.raw.sensor_type == SensorType::Radar {
             return (high_b - low_b) - ((value - low_a) / (high_a - low_a)) * (high_b - low_b);
         }
@@ -62,7 +70,14 @@ impl<'a> Conversion<'a> {
 
     fn sensor_percentage(&self, reading: f64) -> f64 {
         let raw = &self.config.raw;
-        self.map_value(reading, raw.sensor_minimum_ma, raw.sensor_maximum_ma, 0.0, 100.0, true)
+        self.map_value(
+            reading,
+            raw.sensor_minimum_ma,
+            raw.sensor_maximum_ma,
+            0.0,
+            100.0,
+            true,
+        )
     }
 
     /// Level in canonical metres.
@@ -79,8 +94,13 @@ impl<'a> Conversion<'a> {
     }
 
     fn curve_points(&self) -> Vec<(f64, f64)> {
-        let mut points: Vec<(f64, f64)> =
-            self.config.raw.volume_curve.iter().map(|p| (p.level, p.volume)).collect();
+        let mut points: Vec<(f64, f64)> = self
+            .config
+            .raw
+            .volume_curve
+            .iter()
+            .map(|p| (p.level, p.volume))
+            .collect();
         points.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
         points
     }
@@ -92,7 +112,11 @@ impl<'a> Conversion<'a> {
             return Some(self.map_value(lev, raw.empty_level, raw.full_level, 0.0, 100.0, false));
         }
         let vol = get_volume(lev, &self.curve_points())?;
-        let max_vol = raw.volume_curve.iter().map(|p| p.volume).fold(f64::NEG_INFINITY, f64::max);
+        let max_vol = raw
+            .volume_curve
+            .iter()
+            .map(|p| p.volume)
+            .fold(f64::NEG_INFINITY, f64::max);
         Some(round_dp(vol / max_vol * 100.0, 3))
     }
 
@@ -143,7 +167,12 @@ pub struct FaultTracker {
 
 impl Default for FaultTracker {
     fn default() -> Self {
-        Self { active: None, streak: 0, input: None, debounce_samples: FAULT_DEBOUNCE_SAMPLES }
+        Self {
+            active: None,
+            streak: 0,
+            input: None,
+            debounce_samples: FAULT_DEBOUNCE_SAMPLES,
+        }
     }
 }
 
@@ -157,7 +186,13 @@ impl FaultTracker {
     }
 
     /// Debounce the under-range check. True while the input is in fault.
-    fn update(&mut self, config: &DeviceConfig, result: f64, under_range: bool, tags: &dyn TagIo) -> bool {
+    fn update(
+        &mut self,
+        config: &DeviceConfig,
+        result: f64,
+        under_range: bool,
+        tags: &dyn TagIo,
+    ) -> bool {
         let in_fault = self.in_fault(tags);
         if under_range {
             self.input = Some(result);
@@ -181,7 +216,10 @@ impl FaultTracker {
                 crate::util::py_float(config.raw.sensor_minimum_ma),
             );
         } else {
-            tracing::info!("Sensor input back in range at {} {units}", crate::util::py_float(result));
+            tracing::info!(
+                "Sensor input back in range at {} {units}",
+                crate::util::py_float(result)
+            );
         }
         under_range
     }
@@ -236,8 +274,14 @@ pub fn handle_update(
         ] {
             tags.set(name, Value::Null);
         }
-        tags.set(tags::SENSOR_FAULT, Value::from(tags::SENSOR_FAULT_UNDER_RANGE));
-        tags.set(tags::SENSOR_FAULT_MESSAGE, Value::from(fault.message(config)));
+        tags.set(
+            tags::SENSOR_FAULT,
+            Value::from(tags::SENSOR_FAULT_UNDER_RANGE),
+        );
+        tags.set(
+            tags::SENSOR_FAULT_MESSAGE,
+            Value::from(fault.message(config)),
+        );
         tags.set(tags::SENSOR_FAULT_HIDDEN, Value::Bool(false));
         return None;
     }
@@ -252,11 +296,17 @@ pub fn handle_update(
     let conv = Conversion::new(config, params);
     let level = conv.level_reading(reading);
 
-    tags.set(tags::LEVEL_FILLED_PERCENTAGE, opt(conv.filled_percentage(reading)));
+    tags.set(
+        tags::LEVEL_FILLED_PERCENTAGE,
+        opt(conv.filled_percentage(reading)),
+    );
     // level_reading is canonical metres for peer apps; the configured-unit
     // copy is published alongside it for this app's own gauge.
     tags.set(tags::LEVEL_READING, Value::from(level));
-    tags.set(tags::LEVEL_READING_DISPLAY, opt(config.metres_to_depth_units(Some(level))));
+    tags.set(
+        tags::LEVEL_READING_DISPLAY,
+        opt(config.metres_to_depth_units(Some(level))),
+    );
     // Always publish volume so peers can show it; hide_volume and Reading Type
     // only affect this app's own gauge.
     tags.set(tags::LEVEL_VOLUME, opt(conv.volume(reading)));
@@ -294,7 +344,11 @@ pub mod tests {
             for (k, v) in overrides.as_object().cloned().unwrap_or_default() {
                 base[k] = v;
             }
-            Self { config: make_config(base), fault: FaultTracker::default(), tags: FakeTags::default() }
+            Self {
+                config: make_config(base),
+                fault: FaultTracker::default(),
+                tags: FakeTags::default(),
+            }
         }
 
         pub fn feed(&mut self, readings: &[f64]) {
@@ -383,7 +437,10 @@ pub mod tests {
     fn a_fault_after_good_readings_clears_the_stale_level() {
         let mut app = App::new(json!({}));
         app.update(Some(12.0));
-        assert_eq!(app.levels(), vec![json!(50.0), json!(5.0), json!(5.0), json!(500.0)]);
+        assert_eq!(
+            app.levels(),
+            vec![json!(50.0), json!(5.0), json!(5.0), json!(500.0)]
+        );
         app.feed(&[UNDER_RANGE; 3]);
         assert_eq!(app.levels(), nulls());
         assert_eq!(app.tags.value(tags::SENSOR_FAULT), json!("under_range"));
@@ -395,7 +452,10 @@ pub mod tests {
         app.update(Some(12.0));
         app.feed(&[0.5, 12.0, 0.5, 0.5, 12.0, 0.5]);
         assert_eq!(app.tags.value(tags::SENSOR_FAULT), Value::Null);
-        assert_eq!(app.levels(), vec![json!(50.0), json!(5.0), json!(5.0), json!(500.0)]);
+        assert_eq!(
+            app.levels(),
+            vec![json!(50.0), json!(5.0), json!(5.0), json!(500.0)]
+        );
         assert_eq!(app.tags.value(tags::RAW_LEVEL_READING), json!(0.5));
     }
 
@@ -410,7 +470,10 @@ pub mod tests {
         app.update(Some(12.0));
         assert_eq!(app.tags.value(tags::SENSOR_FAULT), Value::Null);
         assert_eq!(app.tags.value(tags::SENSOR_FAULT_HIDDEN), json!(true));
-        assert_eq!(app.levels(), vec![json!(50.0), json!(5.0), json!(5.0), json!(500.0)]);
+        assert_eq!(
+            app.levels(),
+            vec![json!(50.0), json!(5.0), json!(5.0), json!(500.0)]
+        );
     }
 
     #[test]
@@ -425,7 +488,9 @@ pub mod tests {
     #[test]
     fn a_fault_published_before_a_restart_still_needs_good_samples() {
         let mut app = App::new(json!({}));
-        app.tags.store.insert(tags::SENSOR_FAULT.into(), json!("under_range"));
+        app.tags
+            .store
+            .insert(tags::SENSOR_FAULT.into(), json!("under_range"));
         app.feed(&[12.0, 12.0]);
         assert_eq!(app.tags.value(tags::SENSOR_FAULT), json!("under_range"));
         assert_eq!(app.tags.value(tags::LEVEL_READING), Value::Null);
@@ -513,6 +578,9 @@ pub mod tests {
             {"level": 0.1, "volume": 77.66},
         ]}));
         let conv = app.conv();
-        assert!(approx(get_volume(0.05, &conv.curve_points()).unwrap(), 38.83));
+        assert!(approx(
+            get_volume(0.05, &conv.curve_points()).unwrap(),
+            38.83
+        ));
     }
 }

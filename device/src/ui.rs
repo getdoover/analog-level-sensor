@@ -59,13 +59,21 @@ pub struct DeviceUi {
 }
 
 fn alarm_slider(display_name: &str, name: &str, dual: bool) -> Slider {
-    Slider::new(display_name).name(name).dual_slider(dual).inverted(false).hidden(true)
+    Slider::new(display_name)
+        .name(name)
+        .dual_slider(dual)
+        .inverted(false)
+        .hidden(true)
 }
 
 /// The calibration input labels; the endpoints are the configured input
 /// range. A Radar reads inverted: its zero is the level at the maximum input.
 pub fn calibration_labels(low: f64, high: f64, units: &str, radar: bool) -> [String; 3] {
-    let units = if units.is_empty() { String::new() } else { format!(" {units}") };
+    let units = if units.is_empty() {
+        String::new()
+    } else {
+        format!(" {units}")
+    };
     let (zero_at, span_at) = if radar { (high, low) } else { (low, high) };
     [
         format!("Zero - level at {}{units} (m)", format_g(zero_at)),
@@ -76,7 +84,10 @@ pub fn calibration_labels(low: f64, high: f64, units: &str, radar: bool) -> [Str
 
 fn calibration_input(spec: &CalibrationValue, label: &str, default: Option<f64>) -> FloatInput {
     // The RPC handler validates the value; min / max only guide the input.
-    let mut input = FloatInput::new(label).name(spec.name).min_val(spec.minimum).max_val(spec.maximum);
+    let mut input = FloatInput::new(label)
+        .name(spec.name)
+        .min_val(spec.minimum)
+        .max_val(spec.maximum);
     if let Some(default) = default {
         // Each input shows its config default until an operator sets one
         // (`$cmds.app().<name>::<default>`).
@@ -85,7 +96,10 @@ fn calibration_input(spec: &CalibrationValue, label: &str, default: Option<f64>)
     input
 }
 
-fn calibration_children(labels: &[String; 3], defaults: [Option<f64>; 3]) -> Vec<Box<dyn UiElement>> {
+fn calibration_children(
+    labels: &[String; 3],
+    defaults: [Option<f64>; 3],
+) -> Vec<Box<dyn UiElement>> {
     let mut children: Vec<Box<dyn UiElement>> = calibration::VALUES
         .iter()
         .zip(labels)
@@ -95,7 +109,9 @@ fn calibration_children(labels: &[String; 3], defaults: [Option<f64>; 3]) -> Vec
         })
         .collect();
     children.push(Box::new(RpcInput(
-        Button::new("Reset to configured values").name(calibration::RESET_ELEMENT).requires_confirm(true),
+        Button::new("Reset to configured values")
+            .name(calibration::RESET_ELEMENT)
+            .requires_confirm(true),
     )));
     children
 }
@@ -120,7 +136,8 @@ impl UiBuild for DeviceUi {
             tags.sensor_fault_message.name(),
             json_dumps_ascii(&json!(SENSOR_FAULT_DEFAULT_MESSAGE))
         );
-        warning.interaction.element.hidden = Some(Value::String(tag_ref(&tags.sensor_fault_hidden)));
+        warning.interaction.element.hidden =
+            Some(Value::String(tag_ref(&tags.sensor_fault_hidden)));
 
         Self {
             sensor_fault_warning: warning,
@@ -148,7 +165,10 @@ impl UiBuild for DeviceUi {
             sensor_calibration: Submodule::new("Sensor Calibration")
                 .name("sensor_calibration")
                 .hidden(true)
-                .children(calibration_children(&calibration_labels(4.0, 20.0, "mA", false), [None; 3])),
+                .children(calibration_children(
+                    &calibration_labels(4.0, 20.0, "mA", false),
+                    [None; 3],
+                )),
         }
     }
 }
@@ -259,8 +279,12 @@ fn setup_alarm(ui: &mut DeviceUi, config: &DeviceConfig) {
     // Invert for Less Than so the shaded band is the range that does not alarm.
     ui.alarm_point.inverted = alarm_type == AlarmType::LessThan;
     match alarm_type {
-        AlarmType::GreaterThan => ui.alarm_point.interaction.element.display_name = "High Alarm Point".into(),
-        AlarmType::LessThan => ui.alarm_point.interaction.element.display_name = "Low Alarm Point".into(),
+        AlarmType::GreaterThan => {
+            ui.alarm_point.interaction.element.display_name = "High Alarm Point".into()
+        }
+        AlarmType::LessThan => {
+            ui.alarm_point.interaction.element.display_name = "Low Alarm Point".into()
+        }
         AlarmType::AllowedRange => {}
     }
 }
@@ -281,8 +305,10 @@ fn setup_calibration(ui: &mut DeviceUi, config: &DeviceConfig) {
         config.raw.sensor_type == SensorType::Radar,
     );
     let cal_config = calibration::CalibrationConfig::from_config(config);
-    let defaults = calibration::VALUES
-        .map(|spec| spec.config_default(&cal_config).map(|d| round_dp(d, calibration::DECIMALS)));
+    let defaults = calibration::VALUES.map(|spec| {
+        spec.config_default(&cal_config)
+            .map(|d| round_dp(d, calibration::DECIMALS))
+    });
     // Rebuilt rather than edited: the children are type-erased. Their
     // positions are unset again, and the runner's finalize() reassigns the
     // same ones (the traversal order is unchanged).
@@ -321,7 +347,10 @@ mod tests {
         let el = &c["level_reading"];
         assert_eq!(el["units"], "mm");
         assert_eq!(el["decPrecision"], 0);
-        assert_eq!(el["currentValue"], "$tag.app().level_reading_display:number:null");
+        assert_eq!(
+            el["currentValue"],
+            "$tag.app().level_reading_display:number:null"
+        );
         assert_eq!(el["ranges"][0]["max"], json!(1500.0));
         assert_eq!(el["ranges"][1]["max"], json!(10000.0));
     }
@@ -342,7 +371,10 @@ mod tests {
         let (_, c) = build(json!({"depth_units": "mm", "reading_type": null}));
         let el = &c["level_reading"];
         assert_eq!(el["units"], "mm");
-        assert_eq!(el["currentValue"], "$tag.app().level_reading_display:number:null");
+        assert_eq!(
+            el["currentValue"],
+            "$tag.app().level_reading_display:number:null"
+        );
         // hide_volume false in make_config: volume promoted.
         assert_eq!(c["volume"]["position"], 10);
         assert_eq!(c["level"]["position"], 20);
@@ -351,7 +383,13 @@ mod tests {
 
     #[test]
     fn level_alarm_step_matches_the_units_own_resolution() {
-        for (unit, step) in [("m", 0.01), ("cm", 0.1), ("mm", 1.0), ("in", 0.1), ("ft", 0.01)] {
+        for (unit, step) in [
+            ("m", 0.01),
+            ("cm", 0.1),
+            ("mm", 1.0),
+            ("in", 0.1),
+            ("ft", 0.01),
+        ] {
             let (ui, _) = build(alarm(json!({"depth_units": unit})));
             assert_eq!(ui.alarm_point.to_json()["stepSize"], json!(step), "{unit}");
             assert_eq!(ui.alarm_range.to_json()["stepSize"], json!(step), "{unit}");
@@ -360,10 +398,18 @@ mod tests {
 
     #[test]
     fn percentage_alarm_keeps_the_default_step_and_keys() {
-        let (ui, _) = build(alarm(json!({"reading_type": "Filled Percentage", "depth_units": "mm"})));
+        let (ui, _) = build(alarm(
+            json!({"reading_type": "Filled Percentage", "depth_units": "mm"}),
+        ));
         assert_eq!(ui.alarm_point.to_json()["stepSize"], json!(0.1));
-        assert_eq!(ui.alarm_point.interaction.element.name.as_str(), "alarm_point");
-        assert_eq!(ui.alarm_range.interaction.element.name.as_str(), "alarm_range");
+        assert_eq!(
+            ui.alarm_point.interaction.element.name.as_str(),
+            "alarm_point"
+        );
+        assert_eq!(
+            ui.alarm_range.interaction.element.name.as_str(),
+            "alarm_range"
+        );
     }
 
     #[test]
@@ -372,8 +418,14 @@ mod tests {
         let point = &c["alarm_point_mm"];
         assert_eq!(point["currentValue"], "$cmds.app().alarm_point_mm");
         assert_eq!(point["units"], "mm");
-        assert_eq!((point["min"].clone(), point["max"].clone()), (json!(0.0), json!(10000.0)));
-        assert_eq!(c["alarm_range_mm"]["currentValue"], "$cmds.app().alarm_range_mm");
+        assert_eq!(
+            (point["min"].clone(), point["max"].clone()),
+            (json!(0.0), json!(10000.0))
+        );
+        assert_eq!(
+            c["alarm_range_mm"]["currentValue"],
+            "$cmds.app().alarm_range_mm"
+        );
         let (_, metres) = build(alarm(json!({"depth_units": "m"})));
         assert!(metres.get("alarm_point").is_some());
         // keeps its declared position
@@ -384,7 +436,16 @@ mod tests {
     fn each_depth_unit_gets_a_distinct_slider_key() {
         let keys: Vec<String> = ["m", "cm", "mm", "in", "ft"]
             .iter()
-            .map(|u| build(alarm(json!({"depth_units": u}))).0.alarm_point.interaction.element.name.as_str().to_string())
+            .map(|u| {
+                build(alarm(json!({"depth_units": u})))
+                    .0
+                    .alarm_point
+                    .interaction
+                    .element
+                    .name
+                    .as_str()
+                    .to_string()
+            })
             .collect();
         assert_eq!(keys[0], "alarm_point");
         let mut unique = keys.clone();
@@ -424,7 +485,10 @@ mod tests {
         assert_eq!(kids["zero_m"]["currentValue"], "$cmds.app().zero_m::0.25");
         assert_eq!(kids["zero_m"]["displayString"], "Zero - level at 4 mA (m)");
         assert_eq!(kids["span_m"]["displayString"], "Span - level at 20 mA (m)");
-        assert_eq!(kids["reset_calibration"]["displayString"], "Reset to configured values");
+        assert_eq!(
+            kids["reset_calibration"]["displayString"],
+            "Reset to configured values"
+        );
         assert_eq!(kids["zero_m"]["min"], json!(-100.0));
         assert_eq!(kids["span_m"]["min"], json!(0.0));
         // positions survive the rebuild
@@ -434,18 +498,31 @@ mod tests {
 
     #[test]
     fn labels_name_the_input_each_value_is_read_at() {
-        for (ty, zero_at, span_at) in [("Submersible", 4, 20), ("Radar", 20, 4), ("Radar Inverted", 4, 20)] {
+        for (ty, zero_at, span_at) in [
+            ("Submersible", 4, 20),
+            ("Radar", 20, 4),
+            ("Radar Inverted", 4, 20),
+        ] {
             let (_, c) = build(json!({"operator_calibration_enabled": true, "sensor_type": ty}));
             let kids = &c["sensor_calibration"]["children"];
-            assert_eq!(kids["zero_m"]["displayString"], format!("Zero - level at {zero_at} mA (m)"));
-            assert_eq!(kids["span_m"]["displayString"], format!("Span - level at {span_at} mA (m)"));
+            assert_eq!(
+                kids["zero_m"]["displayString"],
+                format!("Zero - level at {zero_at} mA (m)")
+            );
+            assert_eq!(
+                kids["span_m"]["displayString"],
+                format!("Span - level at {span_at} mA (m)")
+            );
         }
     }
 
     #[test]
     fn density_input_defaults_to_water_without_a_config_density() {
         let (_, c) = build(json!({"operator_calibration_enabled": true, "fluid_density": null}));
-        assert_eq!(c["sensor_calibration"]["children"]["fluid_density"]["default"], json!(1000.0));
+        assert_eq!(
+            c["sensor_calibration"]["children"]["fluid_density"]["default"],
+            json!(1000.0)
+        );
     }
 
     #[test]
@@ -453,6 +530,8 @@ mod tests {
         let (ui, _) = build(json!({"operator_calibration_enabled": true}));
         let names = ui.interaction_names();
         assert!(names.contains(&"alarm_point".to_string()));
-        assert!(!names.iter().any(|n| n == "zero_m" || n == "reset_calibration"));
+        assert!(!names
+            .iter()
+            .any(|n| n == "zero_m" || n == "reset_calibration"));
     }
 }

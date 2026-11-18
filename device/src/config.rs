@@ -158,10 +158,18 @@ pub struct RawConfig {
     #[config(default = InputUnits::Milliamps)]
     pub input_units: InputUnits,
     /// Minimum raw sensor input in the configured input units.
-    #[config(title = "Sensor Minimum Input", name = "sensor_minimum_ma", default = 4.0)]
+    #[config(
+        title = "Sensor Minimum Input",
+        name = "sensor_minimum_ma",
+        default = 4.0
+    )]
     pub sensor_minimum_ma: f64,
     /// Maximum raw sensor input in the configured input units.
-    #[config(title = "Sensor Maximum Input", name = "sensor_maximum_ma", default = 20.0)]
+    #[config(
+        title = "Sensor Maximum Input",
+        name = "sensor_maximum_ma",
+        default = 20.0
+    )]
     pub sensor_maximum_ma: f64,
     /// Minimum sensor depth (m). For submersible sensors, the sensor's mounting height above the tank floor (negative if below it)
     #[config(default = 0.0)]
@@ -223,7 +231,11 @@ pub struct RawConfig {
     pub alarm_renotify_interval_s: f64,
 
     /// Let operators set the zero (minimum level), span (maximum level) and fluid density on site, from the Sensor Calibration section of this app and the local HMI, without a redeploy. The Sensor Minimum Metres, Sensor Maximum Metres and Fluid Density above become the defaults that Reset to configured values returns to.
-    #[config(title = "Operator Sensor Calibration", name = "operator_calibration_enabled", default = false)]
+    #[config(
+        title = "Operator Sensor Calibration",
+        name = "operator_calibration_enabled",
+        default = false
+    )]
     pub operator_calibration_enabled: bool,
 
     // Only read at deploy time (drives the app's slot in the UI); a doc
@@ -358,11 +370,15 @@ impl DeviceConfig {
     }
 
     pub fn alarm_slider_min(&self) -> f64 {
-        self.raw.alarm_slider_minimum.unwrap_or_else(|| self.alarm_source_range().0)
+        self.raw
+            .alarm_slider_minimum
+            .unwrap_or_else(|| self.alarm_source_range().0)
     }
 
     pub fn alarm_slider_max(&self) -> f64 {
-        self.raw.alarm_slider_maximum.unwrap_or_else(|| self.alarm_source_range().1)
+        self.raw
+            .alarm_slider_maximum
+            .unwrap_or_else(|| self.alarm_source_range().1)
     }
 
     /// The source's own span, used when the slider bounds are left unset.
@@ -385,7 +401,10 @@ impl DeviceConfig {
     pub fn full_scale_volume(&self) -> f64 {
         let curve = &self.raw.volume_curve;
         if curve.len() >= 2 {
-            curve.iter().map(|p| p.volume).fold(f64::NEG_INFINITY, f64::max)
+            curve
+                .iter()
+                .map(|p| p.volume)
+                .fold(f64::NEG_INFINITY, f64::max)
         } else {
             self.raw.max_volume
         }
@@ -454,14 +473,26 @@ pub mod tests {
 
     #[test]
     fn precision_per_unit() {
-        assert_eq!(make_config(json!({"depth_units": "mm"})).depth_unit_precision(), 0);
-        assert_eq!(make_config(json!({"depth_units": "ft"})).depth_unit_precision(), 2);
+        assert_eq!(
+            make_config(json!({"depth_units": "mm"})).depth_unit_precision(),
+            0
+        );
+        assert_eq!(
+            make_config(json!({"depth_units": "ft"})).depth_unit_precision(),
+            2
+        );
     }
 
     #[test]
     fn reading_type_null_is_legacy_and_omitted_is_the_default() {
-        assert_eq!(make_config(json!({})).reading_type, Some(ReadingType::Percentage));
-        assert_eq!(make_config(json!({"reading_type": null})).reading_type, None);
+        assert_eq!(
+            make_config(json!({})).reading_type,
+            Some(ReadingType::Percentage)
+        );
+        assert_eq!(
+            make_config(json!({"reading_type": null})).reading_type,
+            None
+        );
         assert_eq!(make_config(json!({"reading_type": ""})).reading_type, None);
         assert_eq!(
             make_config(json!({"reading_type": "Volume"})).reading_type,
@@ -472,17 +503,28 @@ pub mod tests {
     #[test]
     fn missing_or_bad_density_is_water() {
         assert_eq!(make_config(json!({})).config_fluid_density(), 1000.0);
-        assert_eq!(make_config(json!({"fluid_density": null})).config_fluid_density(), 1000.0);
-        assert_eq!(make_config(json!({"fluid_density": 0})).config_fluid_density(), 1000.0);
-        assert_eq!(make_config(json!({"fluid_density": 1250})).config_fluid_density(), 1250.0);
+        assert_eq!(
+            make_config(json!({"fluid_density": null})).config_fluid_density(),
+            1000.0
+        );
+        assert_eq!(
+            make_config(json!({"fluid_density": 0})).config_fluid_density(),
+            1000.0
+        );
+        assert_eq!(
+            make_config(json!({"fluid_density": 1250})).config_fluid_density(),
+            1250.0
+        );
     }
 
     #[test]
     fn calibration_flag_defaults_off() {
         assert!(!make_config(json!({})).raw.operator_calibration_enabled);
-        assert!(make_config(json!({"operator_calibration_enabled": true}))
-            .raw
-            .operator_calibration_enabled);
+        assert!(
+            make_config(json!({"operator_calibration_enabled": true}))
+                .raw
+                .operator_calibration_enabled
+        );
     }
 
     // -- the alarm properties (test_app_alarm.py) ------------------------------
@@ -507,24 +549,38 @@ pub mod tests {
     #[test]
     fn reading_type_sets_the_slider_bounds_and_units() {
         let config = make_config(enabled_alarm(json!({"reading_type": "Volume"})));
-        assert_eq!((config.alarm_slider_min(), config.alarm_slider_max()), (0.0, 1000.0));
+        assert_eq!(
+            (config.alarm_slider_min(), config.alarm_slider_max()),
+            (0.0, 1000.0)
+        );
         assert_eq!(config.alarm_units(), "L");
     }
 
     #[test]
     fn slider_bounds_default_to_the_sources_own_span() {
         let level = make_config(enabled_alarm(json!({"reading_type": null})));
-        assert_eq!((level.alarm_slider_min(), level.alarm_slider_max()), (0.0, 10.0));
+        assert_eq!(
+            (level.alarm_slider_min(), level.alarm_slider_max()),
+            (0.0, 10.0)
+        );
         assert_eq!(level.alarm_units(), "m");
 
         let pct = make_config(enabled_alarm(
             json!({"alarm_source": "Filled Percentage", "reading_type": null}),
         ));
-        assert_eq!((pct.alarm_slider_min(), pct.alarm_slider_max()), (0.0, 100.0));
+        assert_eq!(
+            (pct.alarm_slider_min(), pct.alarm_slider_max()),
+            (0.0, 100.0)
+        );
         assert_eq!(pct.alarm_units(), "%");
 
-        let vol = make_config(enabled_alarm(json!({"alarm_source": "Volume", "reading_type": null})));
-        assert_eq!((vol.alarm_slider_min(), vol.alarm_slider_max()), (0.0, 1000.0));
+        let vol = make_config(enabled_alarm(
+            json!({"alarm_source": "Volume", "reading_type": null}),
+        ));
+        assert_eq!(
+            (vol.alarm_slider_min(), vol.alarm_slider_max()),
+            (0.0, 1000.0)
+        );
         assert_eq!(vol.alarm_units(), "L");
     }
 
@@ -533,7 +589,10 @@ pub mod tests {
         let config = make_config(enabled_alarm(
             json!({"alarm_slider_minimum": 2.0, "alarm_slider_maximum": 8.0}),
         ));
-        assert_eq!((config.alarm_slider_min(), config.alarm_slider_max()), (2.0, 8.0));
+        assert_eq!(
+            (config.alarm_slider_min(), config.alarm_slider_max()),
+            (2.0, 8.0)
+        );
     }
 
     #[test]
@@ -572,7 +631,10 @@ pub mod tests {
             json!({"reading_type": "Level Reading", "depth_units": "mm"}),
         ));
         assert_eq!(config.alarm_units(), "mm");
-        assert_eq!((config.alarm_slider_min(), config.alarm_slider_max()), (0.0, 10000.0));
+        assert_eq!(
+            (config.alarm_slider_min(), config.alarm_slider_max()),
+            (0.0, 10000.0)
+        );
     }
 
     #[test]
@@ -583,6 +645,9 @@ pub mod tests {
             "reading_type": "Level Reading",
             "depth_units": "mm",
         })));
-        assert_eq!((config.alarm_slider_min(), config.alarm_slider_max()), (1000.0, 8000.0));
+        assert_eq!(
+            (config.alarm_slider_min(), config.alarm_slider_max()),
+            (1000.0, 8000.0)
+        );
     }
 }

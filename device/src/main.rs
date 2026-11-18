@@ -83,7 +83,9 @@ impl UiCmdsWriter for CtxWriter<'_> {
     async fn write(&mut self, payload: Map<String, Value>) -> Result<()> {
         let mut data = Map::new();
         data.insert(self.0.app_key().to_string(), Value::Object(payload));
-        self.0.update_channel_aggregate(UI_CMDS, &Value::Object(data)).await
+        self.0
+            .update_channel_aggregate(UI_CMDS, &Value::Object(data))
+            .await
     }
 }
 
@@ -123,7 +125,6 @@ async fn store_ui_values(cal: &Mutex<SensorCalibration>, app_key: &str, aggregat
 }
 
 impl AnalogLevelSensor {
-
     /// Cheap xorshift64 in [0,1) — enough entropy for visible sensor noise.
     fn next_rand(&mut self) -> f64 {
         let mut x = self.rng;
@@ -149,32 +150,38 @@ impl AnalogLevelSensor {
     fn register_calibration_rpcs(&self, ctx: &AppContext) {
         for spec in calibration::VALUES {
             let (cal, ctx2) = (self.calibration.clone(), ctx.clone());
-            ctx.rpc().register(Some(UI_CMDS), spec.name, move |rpc_ctx, value| {
+            ctx.rpc()
+                .register(Some(UI_CMDS), spec.name, move |rpc_ctx, value| {
+                    let (cal, ctx) = (cal.clone(), ctx2.clone());
+                    async move {
+                        let mut cal = cal.lock().await;
+                        let mut tags = PendingTags::new(&ctx);
+                        let method = rpc_ctx.method.clone();
+                        let applied = cal
+                            .request(&method, &value, &mut tags, &mut CtxWriter(&ctx))
+                            .await?;
+                        flush_rpc_tags(tags).await;
+                        let mut response = Map::new();
+                        response.insert(method, json!(applied));
+                        Ok::<Value, RpcError>(Value::Object(response))
+                    }
+                });
+        }
+        let (cal, ctx2) = (self.calibration.clone(), ctx.clone());
+        ctx.rpc().register(
+            Some(UI_CMDS),
+            calibration::RESET_ELEMENT,
+            move |_rpc_ctx, _value| {
                 let (cal, ctx) = (cal.clone(), ctx2.clone());
                 async move {
                     let mut cal = cal.lock().await;
                     let mut tags = PendingTags::new(&ctx);
-                    let method = rpc_ctx.method.clone();
-                    let applied =
-                        cal.request(&method, &value, &mut tags, &mut CtxWriter(&ctx)).await?;
+                    let effective = cal.reset(&mut tags, &mut CtxWriter(&ctx)).await?;
                     flush_rpc_tags(tags).await;
-                    let mut response = Map::new();
-                    response.insert(method, json!(applied));
-                    Ok::<Value, RpcError>(Value::Object(response))
+                    Ok::<Value, RpcError>(effective.to_json())
                 }
-            });
-        }
-        let (cal, ctx2) = (self.calibration.clone(), ctx.clone());
-        ctx.rpc().register(Some(UI_CMDS), calibration::RESET_ELEMENT, move |_rpc_ctx, _value| {
-            let (cal, ctx) = (cal.clone(), ctx2.clone());
-            async move {
-                let mut cal = cal.lock().await;
-                let mut tags = PendingTags::new(&ctx);
-                let effective = cal.reset(&mut tags, &mut CtxWriter(&ctx)).await?;
-                flush_rpc_tags(tags).await;
-                Ok::<Value, RpcError>(effective.to_json())
-            }
-        });
+            },
+        );
     }
 }
 
@@ -194,14 +201,18 @@ impl Application for AnalogLevelSensor {
     type Notifications = DeviceNotifications;
 
     fn create(config: DeviceConfig, tags: DeviceTags, ui: DeviceUi) -> Self {
-        let simulate =
-            std::env::var("SIMULATE_AI").map(|v| v != "0" && !v.is_empty()).unwrap_or(false);
+        let simulate = std::env::var("SIMULATE_AI")
+            .map(|v| v != "0" && !v.is_empty())
+            .unwrap_or(false);
         let seed = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos() as u64 | 1)
             .unwrap_or(0x9E3779B97F4A7C15);
         let calibration = SensorCalibration::new(CalibrationConfig::from_config(&config));
-        let alarm = Alarm::new(config.raw.alarm_grace_period_s, config.raw.alarm_renotify_interval_s);
+        let alarm = Alarm::new(
+            config.raw.alarm_grace_period_s,
+            config.raw.alarm_renotify_interval_s,
+        );
         Self {
             config,
             tags,
@@ -238,8 +249,11 @@ impl Application for AnalogLevelSensor {
         if !self.simulate {
             let plt_uri =
                 std::env::var("PLT_URI").unwrap_or_else(|_| "127.0.0.1:50053".to_string());
-            let plt_uri =
-                if plt_uri.contains("://") { plt_uri } else { format!("http://{plt_uri}") };
+            let plt_uri = if plt_uri.contains("://") {
+                plt_uri
+            } else {
+                format!("http://{plt_uri}")
+            };
             tracing::info!("connecting to platform interface at {plt_uri}");
             self.plt = Some(PlatformClient::connect(plt_uri).await?);
         } else {
@@ -260,7 +274,9 @@ impl Application for AnalogLevelSensor {
             let synced = ctx.wait_for_channels_sync(&[UI_CMDS], timeout).await;
             if synced {
                 match ctx.fetch_channel_data(UI_CMDS).await {
-                    Ok(agg) => store_ui_values(&self.calibration, ctx.app_key(), agg.as_ref()).await,
+                    Ok(agg) => {
+                        store_ui_values(&self.calibration, ctx.app_key(), agg.as_ref()).await
+                    }
                     Err(e) => tracing::warn!("could not read ui_cmds: {e}"),
                 }
             }
@@ -297,20 +313,33 @@ impl Application for AnalogLevelSensor {
             self.simulated_ma()
         } else {
             let pin = self.config.raw.ai_pin as i32;
-            self.plt.as_ref().expect("platform connected in setup").fetch_ai(pin).await? as f64
+            self.plt
+                .as_ref()
+                .expect("platform connected in setup")
+                .fetch_ai(pin)
+                .await? as f64
         };
 
         set_power_pin(self.plt.as_ref(), self.config.raw.power_pin, true).await?;
 
-        let reading =
-            conversion::handle_update(&self.config, params, &mut self.fault, Some(result), &mut tags);
+        let reading = conversion::handle_update(
+            &self.config,
+            params,
+            &mut self.fault,
+            Some(result),
+            &mut tags,
+        );
 
         // No level from this sample (a fault, or an under-range sample not
         // yet one): the alarm stays blind to it too.
         if let Some(reading) = reading {
             let conv = Conversion::new(&self.config, params);
-            let point = ctx.ui().get_value(&self.ui.alarm_point.interaction.element.name);
-            let range = ctx.ui().get_value(&self.ui.alarm_range.interaction.element.name);
+            let point = ctx
+                .ui()
+                .get_value(&self.ui.alarm_point.interaction.element.name);
+            let range = ctx
+                .ui()
+                .get_value(&self.ui.alarm_range.interaction.element.name);
             let display_name = ctx.app_display_name();
             if let Some(message) = device::check_alarm(
                 &mut self.alarm,
@@ -321,7 +350,8 @@ impl Application for AnalogLevelSensor {
                 &display_name,
             ) {
                 // No title: the server substitutes the agent's display name.
-                ctx.notify(DeviceNotifications::LEVEL_ALARM.message(message)).await?;
+                ctx.notify(DeviceNotifications::LEVEL_ALARM.message(message))
+                    .await?;
             }
         }
 
@@ -378,8 +408,11 @@ mod tests {
     fn export_is_identical_to_the_python_apps() {
         let path = std::env::temp_dir().join(format!("als-export-{}.json", std::process::id()));
         std::fs::write(&path, "{}").unwrap();
-        doover::docker::application::write_export::<AnalogLevelSensor>(&path, "analog_level_sensor")
-            .unwrap();
+        doover::docker::application::write_export::<AnalogLevelSensor>(
+            &path,
+            "analog_level_sensor",
+        )
+        .unwrap();
         let ours: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         let _ = std::fs::remove_file(&path);
         let python: Value = serde_json::from_str(PYTHON_EXPORT).unwrap();

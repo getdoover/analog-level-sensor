@@ -82,7 +82,10 @@ pub struct PendingTags<'a> {
 
 impl<'a> PendingTags<'a> {
     pub fn new(ctx: &'a doover::AppContext) -> Self {
-        Self { ctx, writes: Vec::new() }
+        Self {
+            ctx,
+            writes: Vec::new(),
+        }
     }
 
     pub async fn flush(self) -> doover::Result<()> {
@@ -164,7 +167,10 @@ pub mod tests {
     fn fault_tag_defaults() {
         let tags = DeviceTags::detached();
         assert_eq!(tags.sensor_fault_hidden.get(), Some(true));
-        assert_eq!(tags.sensor_fault_message.get().as_deref(), Some(SENSOR_FAULT_DEFAULT_MESSAGE));
+        assert_eq!(
+            tags.sensor_fault_message.get().as_deref(),
+            Some(SENSOR_FAULT_DEFAULT_MESSAGE)
+        );
         assert_eq!(tags.sensor_fault.get(), None);
     }
 }

@@ -47,7 +47,11 @@ pub fn format_g(x: f64) -> String {
         return if x > 0.0 { "inf".into() } else { "-inf".into() };
     }
     if x == 0.0 {
-        return if x.is_sign_negative() { "-0".into() } else { "0".into() };
+        return if x.is_sign_negative() {
+            "-0".into()
+        } else {
+            "0".into()
+        };
     }
     // Round to 6 significant digits first; the exponent is the rounded one's.
     let sci = format!("{x:.5e}");
@@ -83,7 +87,10 @@ pub fn py_repr(v: &Value) -> String {
         },
         Value::String(s) => format!("'{}'", s.replace('\\', "\\\\").replace('\'', "\\'")),
         Value::Array(items) => {
-            format!("[{}]", items.iter().map(py_repr).collect::<Vec<_>>().join(", "))
+            format!(
+                "[{}]",
+                items.iter().map(py_repr).collect::<Vec<_>>().join(", ")
+            )
         }
         Value::Object(map) => format!(
             "{{{}}}",
