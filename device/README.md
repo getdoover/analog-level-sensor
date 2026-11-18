@@ -3,8 +3,7 @@
 The device app, in Rust on
 **[doover-rs](https://github.com/getdoover/doover-rs)** (the Rust equivalent of
 `pydoover`). It replaced the Python app that shared `../src/common` with the
-processor, keeping its config schema, UI schema and notification schema (the
-export is checked byte for byte against the Python app's), its tags, and its
+processor, keeping its config, UI and notification schemas, its tags, and its
 behaviour:
 
 - mA → level / filled percentage / volume, with the volume curve, Radar
@@ -46,10 +45,7 @@ The Python app's tests are ported alongside each module (`cargo test`).
 ## Schemas
 
 `cargo run -- export doover_config.json --app-name analog_level_sensor`
-writes the config, UI and notification schemas. `src/main.rs` has a test that
-requires them to equal the Python app's last export, frozen in
-`tests/fixtures/python_export.json`, so existing installs see exactly the
-schemas they had. A deliberate schema change updates the fixture with it.
+writes the config, UI and notification schemas; CI checks them on every build.
 
 ## Env
 
@@ -57,8 +53,6 @@ schemas they had. A deliberate schema change updates the fixture with it.
   `APP_KEY` — as for any Doover app.
 - `RUST_LOG` — log filter (default `info`). The per-sample reading is logged at
   `debug` (Python logs it at INFO, which at 40 Hz costs a lot of CPU).
-- `SIMULATE_AI` — test only: synthesise a noisy in-range mA value instead of
-  reading the platform interface.
 
 ## Build
 

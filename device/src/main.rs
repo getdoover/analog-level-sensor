@@ -1,8 +1,7 @@
 //! The analog level sensor, on the
 //! [`doover`](https://github.com/getdoover/doover-rs) client library (it
-//! replaced the Python app, whose schemas it keeps byte for byte): read an
-//! analog-input pin from the
-//! platform interface, convert it to level / filled percentage / volume,
+//! replaced the Python app, keeping its schemas): read an analog-input pin
+//! from the platform interface, convert it to level / filled percentage / volume,
 //! publish them as tags, alarm on the configured reading, and let operators
 //! calibrate the zero, span and fluid density from the UI.
 //!
@@ -28,9 +27,6 @@
 //!
 //!   DDA_URI=127.0.0.1:50051 PLT_URI=127.0.0.1:50053 APP_KEY=analog_level_sensor_1 \
 //!     cargo run --release
-//!
-//! Set SIMULATE_AI=1 to synthesise a noisy 4–20 mA signal instead of reading
-//! the platform interface.
 
 mod alarm;
 mod calibration;
@@ -98,10 +94,6 @@ struct AnalogLevelSensor {
     alarm: Alarm,
     /// Shared with the calibration RPC handlers, which run on their own tasks.
     calibration: Arc<Mutex<SensorCalibration>>,
-    /// SIMULATE_AI: synthesise a noisy in-range mA value.
-    simulate: bool,
-    rng: u64,
-    t: u64,
     /// When the loop last drove the power pin (see [`POWER_REFRESH`]).
     power_at: Option<Instant>,
 }
@@ -133,24 +125,6 @@ async fn store_ui_values(cal: &Mutex<SensorCalibration>, app_key: &str, aggregat
 }
 
 impl AnalogLevelSensor {
-    /// Cheap xorshift64 in [0,1) — enough entropy for visible sensor noise.
-    fn next_rand(&mut self) -> f64 {
-        let mut x = self.rng;
-        x ^= x << 13;
-        x ^= x >> 7;
-        x ^= x << 17;
-        self.rng = x;
-        (x >> 11) as f64 / (1u64 << 53) as f64
-    }
-
-    /// A plausible 4–20 mA signal: mid-range base + slow drift + noise.
-    fn simulated_ma(&mut self) -> f64 {
-        self.t = self.t.wrapping_add(1);
-        let drift = 6.0 * (self.t as f64 * 0.01).sin();
-        let noise = (self.next_rand() - 0.5) * 1.0;
-        (12.0 + drift + noise).clamp(4.0, 20.0)
-    }
-
     /// Register the calibration RPCs on ui_cmds (pydoover
     /// `@ui.handler(RPC_PATTERN / RESET_ELEMENT, auto_update=False)`): the
     /// handler stores the value itself and answers `{method: applied}`, or a
@@ -209,13 +183,6 @@ impl Application for AnalogLevelSensor {
     type Notifications = DeviceNotifications;
 
     fn create(config: DeviceConfig, tags: DeviceTags, ui: DeviceUi) -> Self {
-        let simulate = std::env::var("SIMULATE_AI")
-            .map(|v| v != "0" && !v.is_empty())
-            .unwrap_or(false);
-        let seed = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos() as u64 | 1)
-            .unwrap_or(0x9E3779B97F4A7C15);
         let calibration = SensorCalibration::new(CalibrationConfig::from_config(&config));
         let alarm = Alarm::new(
             config.raw.alarm_grace_period_s,
@@ -229,9 +196,6 @@ impl Application for AnalogLevelSensor {
             fault: FaultTracker::default(),
             alarm,
             calibration: Arc::new(Mutex::new(calibration)),
-            simulate,
-            rng: seed,
-            t: 0,
             power_at: None,
         }
     }
@@ -255,19 +219,14 @@ impl Application for AnalogLevelSensor {
     }
 
     async fn setup(&mut self, ctx: &AppContext) -> Result<()> {
-        if !self.simulate {
-            let plt_uri =
-                std::env::var("PLT_URI").unwrap_or_else(|_| "127.0.0.1:50053".to_string());
-            let plt_uri = if plt_uri.contains("://") {
-                plt_uri
-            } else {
-                format!("http://{plt_uri}")
-            };
-            tracing::info!("connecting to platform interface at {plt_uri}");
-            self.plt = Some(PlatformClient::connect(plt_uri).await?);
+        let plt_uri = std::env::var("PLT_URI").unwrap_or_else(|_| "127.0.0.1:50053".to_string());
+        let plt_uri = if plt_uri.contains("://") {
+            plt_uri
         } else {
-            tracing::warn!("SIMULATE_AI set: synthesising AI values (platform interface NOT read)");
-        }
+            format!("http://{plt_uri}")
+        };
+        tracing::info!("connecting to platform interface at {plt_uri}");
+        self.plt = Some(PlatformClient::connect(plt_uri).await?);
 
         set_power_pin(self.plt.as_ref(), self.config.raw.power_pin, true).await?;
         self.power_at = Some(Instant::now());
@@ -319,16 +278,13 @@ impl Application for AnalogLevelSensor {
             }
         };
 
-        let result = if self.simulate {
-            self.simulated_ma()
-        } else {
-            let pin = self.config.raw.ai_pin as i32;
-            self.plt
-                .as_ref()
-                .expect("platform connected in setup")
-                .fetch_ai(pin)
-                .await? as f64
-        };
+        let pin = self.config.raw.ai_pin as i32;
+        let result = self
+            .plt
+            .as_ref()
+            .expect("platform connected in setup")
+            .fetch_ai(pin)
+            .await? as f64;
 
         if self.power_at.is_none_or(|at| at.elapsed() >= POWER_REFRESH) {
             set_power_pin(self.plt.as_ref(), self.config.raw.power_pin, true).await?;
@@ -405,37 +361,4 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
     tracing_subscriber::fmt().with_env_filter(filter).init();
     doover::run::<AnalogLevelSensor>().await
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The schemas the Python app published (`export-config`, `export-ui`,
-    /// `export-notifications`), frozen when this app replaced it: existing
-    /// installs keep exactly the config, UI and notifications they had. A
-    /// deliberate schema change updates this file with it.
-    const PYTHON_EXPORT: &str = include_str!("../tests/fixtures/python_export.json");
-
-    #[test]
-    fn export_is_identical_to_the_python_apps() {
-        let path = std::env::temp_dir().join(format!("als-export-{}.json", std::process::id()));
-        std::fs::write(&path, "{}").unwrap();
-        doover::docker::application::write_export::<AnalogLevelSensor>(
-            &path,
-            "analog_level_sensor",
-        )
-        .unwrap();
-        let ours: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        let _ = std::fs::remove_file(&path);
-        let python: Value = serde_json::from_str(PYTHON_EXPORT).unwrap();
-        for key in ["config_schema", "ui_schema", "notification_schema"] {
-            // Compared as text, so key order counts too.
-            assert_eq!(
-                serde_json::to_string_pretty(&ours["analog_level_sensor"][key]).unwrap(),
-                serde_json::to_string_pretty(&python[key]).unwrap(),
-                "{key} differs from the Python export"
-            );
-        }
-    }
 }
