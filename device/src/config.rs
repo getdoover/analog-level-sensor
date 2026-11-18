@@ -9,7 +9,7 @@
 //! - pydoover's explicit `position=` per element (doover-rs numbers elements by
 //!   declaration order, and this schema has positions out of order and two
 //!   pairs that share one), patched into the exported schema, so the export
-//!   stays byte-identical to the Python app's;
+//!   stays byte-identical to the Python app's (which it replaced);
 //! - the raw-value fallbacks the Python properties apply: an explicit `null`
 //!   (or empty) Reading Type means "legacy layout", which doover-rs's loader
 //!   would otherwise turn into the default, and an unknown or empty Depth Units

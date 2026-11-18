@@ -1,5 +1,9 @@
 # Alarm System — Design Specification
 
+> In this app the alarm is `src/alarm.rs` (logic) and `src/device.rs` (wiring),
+> ported from the Python implementation this spec describes; the code samples
+> below are that Python.
+
 This describes the configurable alarm built for the **4-20mA Sensor** app
 (`~/4-20ma-sensor`, branch `bump-pydoover-1.9.0`). It exists so the same alarm
 can be implemented in **analog-level-sensor** with identical behaviour, wording,
