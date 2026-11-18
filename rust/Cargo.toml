@@ -1,0 +1,24 @@
+[package]
+name = "analog-level-sensor"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Analog level sensor Doover app, rewritten in Rust on the doover-rs client library"
+
+[[bin]]
+name = "analog-level-sensor"
+path = "src/main.rs"
+
+[dependencies]
+# The Rust equivalent of pydoover, pinned to a revision for reproducible builds
+# (switch to a version tag once doover-rs starts cutting releases).
+doover = { git = "https://github.com/getdoover/doover-rs", rev = "0315a8921067fcdd015b678604e8cd7211048239" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "time"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
